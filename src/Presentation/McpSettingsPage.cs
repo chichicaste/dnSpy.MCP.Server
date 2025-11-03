@@ -4,7 +4,7 @@ using System.ComponentModel.Composition;
 using dnSpy.Contracts.Images;
 using dnSpy.Contracts.Settings.Dialog;
 
-namespace dnSpy.MCP.Server {
+namespace dnSpy.MCP.Server.Presentation {
 	/// <summary>
 	/// Provider for the MCP server settings page in dnSpy settings dialog.
 	/// </summary>

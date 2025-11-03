@@ -3,8 +3,10 @@ using System.ComponentModel.Composition;
 using dnSpy.Contracts.Images;
 using dnSpy.Contracts.Menus;
 using dnSpy.Contracts.ToolBars;
+using dnSpy.MCP.Server.Communication;
+using dnSpy.MCP.Server.Helper;
 
-namespace dnSpy.MCP.Server {
+namespace dnSpy.MCP.Server.Presentation {
 	static class McpToolBarConstants {
 		public const string GROUP_APP_TB_MCP = "5050,7A9E1601-0E90-4A3A-B5A9-7F9C094C4E29";
 	}

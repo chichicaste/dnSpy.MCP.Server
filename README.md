@@ -2,7 +2,7 @@
 
 A Model Context Protocol (MCP) server that exposes dnSpy's .NET assembly analysis capabilities to AI assistants, enabling advanced code analysis, reverse engineering, and tool generation.
 
-**Status**: 🟢 Production Ready | **Commands**: 30/30 Implemented | **Compilation**: ✅ 0 errors, 0 warnings
+**Status**: 🟢 Develop | **Commands**: 30/30 Implemented | **Compilation**: ✅ 0 errors, 0 warnings
 
 ---
 
@@ -144,21 +144,20 @@ client.call_tool("find_dead_code", {
 ---
 
 ## Project Structure
-
+ 
 ```
-dnSpyEx/
-└── dnSpy/
-    └── Extensions/
-        └── dnSpy.MCP.Server/
-            ├── McpServer.cs                - HTTP/SSE protocol
-            ├── McpTools.cs                 - 30 commands
-            ├── CodeAnalysisHelpers.cs      - Phase 5 helpers
-            ├── UsageFindingCommandTools.cs - Phase 4 IL analysis
-            ├── [Other support files]
-            ├── README.md                   - This file
-            ├── STATUS.md                   - Implementation status
-            ├── ARCHITECTURE.md             - Design documentation
-            └── WORKFLOW.md                 - Technical guide
+dnSpy.MCP.Server/
+├─ src/
+│  ├─ Presentation/   # Integracion (UI, menús)
+│  ├─ Application/    # Command handlers
+│  ├─ Core/           # Modelos + interfaces (dominio)
+│  ├─ Communication/  # JSON-RPC + MCP transport (stdio/ws)
+│  ├─ Helper/         # Utilidades transversales
+│  └─ Contracts/      # DTOs MCP y contratos públicos
+├─ docs/
+│  ├─ ARCHITECTURE.md
+│  └─ STATUS.md
+└─ README.md
 ```
 
 ---
@@ -207,4 +206,4 @@ dnSpyEx/
 
 ---
 
-**Version**: 1.1 | **Status**: 🟢 Production Ready
+**Version**: 1.1 | **Status**: 🟢 Ready

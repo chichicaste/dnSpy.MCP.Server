@@ -6,7 +6,7 @@ using dnSpy.Contracts.Extension;
 using dnSpy.Contracts.Output;
 using dnSpy.Contracts.Text;
 
-namespace dnSpy.MCP.Server {
+namespace dnSpy.MCP.Server.Helper {
 	/// <summary>
 	/// Centralized logger for the MCP Server extension.
 	/// Provides unified logging to both file and dnSpy Output pane.

@@ -7,8 +7,9 @@ using System.Text.Json;
 using dnlib.DotNet;
 using dnSpy.Contracts.Documents.Tabs.DocViewer;
 using dnSpy.Contracts.Documents.TreeView;
+using dnSpy.MCP.Server.Contracts;
 
-namespace dnSpy.MCP.Server
+namespace dnSpy.MCP.Server.Application
 {
     /// <summary>
     /// Assembly-focused utilities extracted from McpTools.

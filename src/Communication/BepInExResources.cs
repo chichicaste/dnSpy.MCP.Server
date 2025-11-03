@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
+using dnSpy.MCP.Server.Contracts;
+using dnSpy.MCP.Server.Presentation;
 
-namespace dnSpy.MCP.Server {
+namespace dnSpy.MCP.Server.Communication {
 	/// <summary>
 	/// Provides embedded BepInEx documentation resources for MCP.
 	/// </summary>

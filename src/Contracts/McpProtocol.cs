@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
-namespace dnSpy.MCP.Server {
+namespace dnSpy.MCP.Server.Contracts {
 	// MCP Protocol Models based on Model Context Protocol specification
 	// Follows JSON-RPC 2.0 protocol with MCP-specific extensions
 

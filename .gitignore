@@ -31,6 +31,7 @@ json/
 *.snupkg
 .nuget/
 packages/
+#backup/
 
 # Local development
 local.settings.json

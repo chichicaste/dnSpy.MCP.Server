@@ -358,8 +358,17 @@ Methods requiring interop features (P/Invoke, marshalling) are delegated to `Mcp
 
 ```
 dnSpy.MCP.Server/
-├── ...
-
+├─ src/
+│  ├─ Presentation/   # Integracion (UI, menús)
+│  ├─ Application/    # Command handlers
+│  ├─ Core/           # Modelos + interfaces (dominio)
+│  ├─ Communication/  # JSON-RPC + MCP transport (stdio/ws)
+│  ├─ Helper/         # Utilidades transversales
+│  └─ Contracts/      # DTOs MCP y contratos públicos
+├─ docs/
+│  ├─ ARCHITECTURE.md
+│  └─ STATUS.md
+└─ README.md
 ```
 
 ---

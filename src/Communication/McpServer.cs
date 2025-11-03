@@ -8,7 +8,12 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace dnSpy.MCP.Server {
+using dnSpy.MCP.Server.Presentation;
+using dnSpy.MCP.Server.Application;
+using dnSpy.MCP.Server.Contracts;
+using dnSpy.MCP.Server.Helper;
+
+namespace dnSpy.MCP.Server.Communication {
 	/// <summary>
 	/// HTTP server implementing the Model Context Protocol (MCP) for exposing dnSpy analysis tools to AI assistants.
 	/// Uses an HttpListener hosted on localhost to keep dependencies minimal.

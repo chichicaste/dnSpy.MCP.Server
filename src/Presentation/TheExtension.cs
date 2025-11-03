@@ -2,8 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using dnSpy.Contracts.Extension;
+using dnSpy.MCP.Server;
+using dnSpy.MCP.Server.Communication;
+using dnSpy.MCP.Server.Helper;
 
-namespace dnSpy.MCP.Server {
+namespace dnSpy.MCP.Server.Presentation {
 	/// <summary>
 	/// Main extension entry point for the MCP (Model Context Protocol) Server.
 	/// This extension enables AI assistants to analyze .NET assemblies loaded in dnSpy.

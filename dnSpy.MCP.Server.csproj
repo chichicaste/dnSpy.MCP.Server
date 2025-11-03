@@ -31,4 +31,37 @@
     <PackageReference Include="System.Text.Json" Version="8.0.5" Condition=" '$(IsDotNetFramework)' == 'true' " />
   </ItemGroup>
 
+  <!-- Exclude backup and docs directories from implicit SDK compile items -->
+  <ItemGroup>
+    <Compile Remove="backup\**\*.cs" />
+    <None Remove="backup\**\*.xaml" />
+    <Compile Remove="docs\**\*.cs" />
+    <None Remove="docs\**\*.xaml" />
+  </ItemGroup>
+
+  <!-- Source files under src/ are discovered implicitly by the SDK.
+       Avoid explicitly adding <Compile Include="src\**\*.cs" /> to prevent duplicate
+       Compile items (see https://aka.ms/sdkimplicititems). -->
+
+  <!-- Exclude original root copies to avoid duplicate compile errors -->
+  <ItemGroup>
+    <Compile Remove="AssemblyTools.cs" />
+    <Compile Remove="BepInExResources.cs" />
+    <Compile Remove="CodeAnalysisHelpers.cs" />
+    <Compile Remove="McpInteropModels.cs" />
+    <Compile Remove="McpInteropTools.cs" />
+    <Compile Remove="McpOutput.cs" />
+    <Compile Remove="McpProtocol.cs" />
+    <Compile Remove="McpServer.cs" />
+    <Compile Remove="McpSettings.cs" />
+    <Compile Remove="McpSettingsControl.xaml.cs" />
+    <None Remove="McpSettingsControl.xaml" />
+    <Compile Remove="McpSettingsPage.cs" />
+    <Compile Remove="McpTools.cs" />
+    <Compile Remove="TheExtension.cs" />
+    <Compile Remove="ToolbarCommands.cs" />
+    <Compile Remove="TypeTools.cs" />
+    <Compile Remove="UsageFindingCommandTools.cs" />
+  </ItemGroup>
+
 </Project>

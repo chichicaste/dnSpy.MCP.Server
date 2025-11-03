@@ -10,8 +10,12 @@ using dnSpy.Contracts.Decompiler;
 using dnSpy.Contracts.Documents.Tabs.DocViewer;
 using dnSpy.Contracts.Documents.TreeView;
 using dnSpy.Contracts.Text;
+using dnSpy.MCP.Server.Contracts;
+using dnSpy.MCP.Server.Application;
+using dnSpy.MCP.Server.Helper;
 
-namespace dnSpy.MCP.Server
+
+namespace dnSpy.MCP.Server.Application
 {
     /// <summary>
     /// Implements MCP tools for analyzing .NET assemblies and generating code.
@@ -1439,7 +1443,16 @@ namespace dnSpy.MCP.Server
         {
             try
             {
-                var interopType = Type.GetType("dnSpy.MCP.Server.McpInteropTools");
+                // Try known locations for the interop implementation (support moved namespaces)
+                var interopType = Type.GetType("dnSpy.MCP.Server.McpInteropTools")
+                                 ?? Type.GetType("dnSpy.MCP.Server.Communication.McpInteropTools");
+                if (interopType == null)
+                {
+                    // Fallback: search loaded assemblies for either type name
+                    interopType = AppDomain.CurrentDomain.GetAssemblies()
+                        .Select(a => a.GetType("dnSpy.MCP.Server.Communication.McpInteropTools") ?? a.GetType("dnSpy.MCP.Server.McpInteropTools"))
+                        .FirstOrDefault(t => t != null);
+                }
                 if (interopType == null)
                 {
                     return new CallToolResult

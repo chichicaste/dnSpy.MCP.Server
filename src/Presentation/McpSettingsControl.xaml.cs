@@ -6,7 +6,7 @@ using System.Windows.Controls;
 using dnSpy.Contracts.Output;
 using dnSpy.Contracts.Text;
 
-namespace dnSpy.MCP.Server {
+namespace dnSpy.MCP.Server.Presentation {
 	/// <summary>
 	/// User control for MCP server settings UI.
 	/// </summary>

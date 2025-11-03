@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Generic;
+using dnSpy.MCP.Server.Contracts;
 
-namespace dnSpy.MCP.Server
+namespace dnSpy.MCP.Server.Communication
 {
     /// <summary>
     /// Interfaces y modelos para herramientas de interoperabilidad nativa.

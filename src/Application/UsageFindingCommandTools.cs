@@ -5,8 +5,9 @@ using System.Linq;
 using System.Text.Json;
 using dnlib.DotNet;
 using dnSpy.Contracts.Documents.TreeView;
+using dnSpy.MCP.Server.Contracts;
 
-namespace dnSpy.MCP.Server
+namespace dnSpy.MCP.Server.Application
 {
     /// <summary>
     /// Phase 4: Usage Finding Commands

@@ -8,8 +8,9 @@ using dnlib.DotNet;
 using dnSpy.Contracts.Decompiler;
 using dnSpy.Contracts.Documents.Tabs.DocViewer;
 using dnSpy.Contracts.Documents.TreeView;
+using dnSpy.MCP.Server.Contracts;
 
-namespace dnSpy.MCP.Server
+namespace dnSpy.MCP.Server.Application
 {
     /// <summary>
     /// Type-focused utilities extracted from McpTools.

@@ -7,7 +7,10 @@ using dnSpy.Contracts.MVVM;
 using dnSpy.Contracts.Settings;
 using dnSpy.Contracts.Text;
 
-namespace dnSpy.MCP.Server {
+using dnSpy.MCP.Server.Communication;
+using dnSpy.MCP.Server.Helper;
+
+namespace dnSpy.MCP.Server.Presentation {
 	/// <summary>
 	/// Settings for the MCP server extension, including server configuration and logging.
 	/// </summary>

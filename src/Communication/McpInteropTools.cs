@@ -8,8 +8,10 @@ using System.IO;
 using dnlib.DotNet;
 using dnSpy.Contracts.Documents.Tabs.DocViewer;
 using dnSpy.Contracts.Documents.TreeView;
+using dnSpy.MCP.Server.Contracts;
+using dnSpy.MCP.Server.Helper;
 
-namespace dnSpy.MCP.Server
+namespace dnSpy.MCP.Server.Communication
 {
     /// <summary>
     /// Herramientas específicas para interoperabilidad nativa / PInvoke / C++/CLI.
