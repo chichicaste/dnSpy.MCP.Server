@@ -1,0 +1,40 @@
+<UserControl x:Class="dnSpy.MCP.Server.McpSettingsControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Margin="5">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Settings Section -->
+        <StackPanel Grid.Row="0">
+            <CheckBox Content="Enable MCP Server" IsChecked="{Binding EnableServer}" Margin="0,0,0,10"/>
+            <TextBlock Text="MCP Server Configuration" FontWeight="Bold" Margin="0,10,0,5"/>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Text="Host:" Grid.Row="0" Grid.Column="0" Margin="0,5,10,5" VerticalAlignment="Center"/>
+                <TextBox Text="{Binding Host, UpdateSourceTrigger=PropertyChanged}" Grid.Row="0" Grid.Column="1" Margin="0,5,0,5" MinWidth="200"/>
+
+                <TextBlock Text="Port:" Grid.Row="1" Grid.Column="0" Margin="0,5,10,5" VerticalAlignment="Center"/>
+                <TextBox Text="{Binding Port, UpdateSourceTrigger=PropertyChanged}" Grid.Row="1" Grid.Column="1" Margin="0,5,0,5" MinWidth="200"/>
+            </Grid>
+            <TextBlock Margin="0,10,0,10"
+                       FontStyle="Italic"
+                       Foreground="Gray">
+                <Run Text="Note: Server starts/stops immediately when enabled/disabled."/>
+                <LineBreak/>
+                <Run Text="Host/Port changes require restarting dnSpy."/>
+            </TextBlock>
+        </StackPanel>
+
+    </Grid>
+</UserControl>

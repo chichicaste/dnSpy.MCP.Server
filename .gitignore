@@ -1,0 +1,40 @@
+# Build results
+bin/
+obj/
+json/
+*.dll
+*.pdb
+*.exe
+
+# IDE and editor files
+.vs/
+.vscode/
+*.sln
+*.csproj.user
+*.user
+*.suo
+*~
+.DS_Store
+
+# Claude Code configuration (not for version control)
+.claude/
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.bak
+*.swp
+
+# NuGet
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+
+# Local development
+local.settings.json
+appsettings.local.json
+
+# OS files
+Thumbs.db
