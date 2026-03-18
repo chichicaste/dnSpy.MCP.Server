@@ -1,5 +1,6 @@
 /*
     Copyright (C) 2026 @chichicaste
+    Modifications Copyright (C) 2026 @geocine
 
     This file is part of dnSpy MCP Server module. 
 
@@ -835,16 +836,20 @@ namespace dnSpy.MCP.Server.Application {
 	}
 
 	AssemblyDef? FindAssemblyByName(string name, string? filePath = null) {
-			if (!string.IsNullOrEmpty(filePath)) {
-				var normalized = filePath!.Replace('/', '\\');
-				var byPath = documentTreeView.GetAllModuleNodes()
-					.FirstOrDefault(m => (m.Document?.Filename ?? "").Replace('/', '\\')
-						.Equals(normalized, StringComparison.OrdinalIgnoreCase));
-				if (byPath?.Document?.AssemblyDef != null) return byPath.Document.AssemblyDef;
-			}
-			return documentTreeView.GetAllModuleNodes()
-				.Select(m => m.Document?.AssemblyDef)
-				.FirstOrDefault(a => a != null && a.Name.String.Equals(name, StringComparison.OrdinalIgnoreCase));
+			return UiThreadHelper.Invoke(() => {
+				if (!string.IsNullOrEmpty(filePath)) {
+					var normalized = filePath!.Replace('/', '\\');
+					var byPath = documentTreeView.GetAllModuleNodes()
+						.FirstOrDefault(m => (m.Document?.Filename ?? "").Replace('/', '\\')
+							.Equals(normalized, StringComparison.OrdinalIgnoreCase));
+					if (byPath?.Document?.AssemblyDef != null)
+						return byPath.Document.AssemblyDef;
+				}
+
+				return documentTreeView.GetAllModuleNodes()
+					.Select(m => m.Document?.AssemblyDef)
+					.FirstOrDefault(a => a != null && a.Name.String.Equals(name, StringComparison.OrdinalIgnoreCase));
+			});
 		}
 
 		TypeDef? FindTypeInAssembly(AssemblyDef assembly, string fullName) =>

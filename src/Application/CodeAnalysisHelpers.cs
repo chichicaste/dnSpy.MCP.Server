@@ -1,5 +1,6 @@
 /*
     Copyright (C) 2026 @chichicaste
+    Modifications Copyright (C) 2026 @geocine
 
     This file is part of dnSpy MCP Server module. 
 
@@ -25,6 +26,7 @@ using System.Text.Json;
 using dnlib.DotNet;
 using dnSpy.Contracts.Documents.TreeView;
 using dnSpy.MCP.Server.Contracts;
+using dnSpy.MCP.Server.Helper;
 
 namespace dnSpy.MCP.Server.Application
 {
@@ -192,11 +194,12 @@ namespace dnSpy.MCP.Server.Application
         public Dictionary<string, List<string>> ComputeAssemblyDependencies()
         {
             var result = new Dictionary<string, List<string>>();
-            var assemblies = documentTreeView.GetAllModuleNodes()
-                .Select(m => m.Document?.AssemblyDef)
-                .Where(a => a != null)
-                .Distinct()
-                .ToList();
+            var assemblies = UiThreadHelper.Invoke(() =>
+                documentTreeView.GetAllModuleNodes()
+                    .Select(m => m.Document?.AssemblyDef)
+                    .Where(a => a != null)
+                    .Distinct()
+                    .ToList());
 
             foreach (var assembly in assemblies)
             {
@@ -502,9 +505,10 @@ namespace dnSpy.MCP.Server.Application
         // ── Private lookup helpers ───────────────────────────────────────────────
 
         private AssemblyDef? FindAssemblyByName(string name) =>
-            documentTreeView.GetAllModuleNodes()
-                .Select(m => m.Document?.AssemblyDef)
-                .FirstOrDefault(a => a?.Name.String.Equals(name, StringComparison.OrdinalIgnoreCase) == true);
+            UiThreadHelper.Invoke(() =>
+                documentTreeView.GetAllModuleNodes()
+                    .Select(m => m.Document?.AssemblyDef)
+                    .FirstOrDefault(a => a?.Name.String.Equals(name, StringComparison.OrdinalIgnoreCase) == true));
 
         private TypeDef? FindTypeInAssembly(AssemblyDef asm, string typeName) =>
             asm.Modules
