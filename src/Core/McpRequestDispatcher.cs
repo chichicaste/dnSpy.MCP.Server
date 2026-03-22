@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
+using dnSpy.MCP.Server.Application;
 using dnSpy.MCP.Server.Contracts;
 using dnSpy.MCP.Server.Helper;
 using dnSpy.MCP.Server.Tools;
@@ -59,7 +60,7 @@ namespace dnSpy.MCP.Server.Core {
 			case "ping":
 				return new Dictionary<string, object>();
 			case "tools/list":
-				return new ListToolsResult { Tools = toolRegistry.ListTools().ToList() };
+				return new ListToolsResult { Tools = toolRegistry.ListTools(CreateCatalogFilter(context.Request.Params)).ToList() };
 			case "tools/call":
 				return HandleCallTool(context);
 			case "resources/list":
@@ -141,6 +142,21 @@ namespace dnSpy.MCP.Server.Core {
 					},
 				},
 			};
+		}
+
+		static ToolCatalogFilter CreateCatalogFilter(Dictionary<string, object>? args) {
+			bool includeHidden = false;
+			var mode = McpProtocolHelpers.GetString(args, "mode");
+			if (string.Equals(mode, "full", StringComparison.OrdinalIgnoreCase))
+				includeHidden = true;
+
+			if (args != null && args.TryGetValue("include_hidden", out var includeHiddenObj)) {
+				if (includeHiddenObj is bool hiddenBool) includeHidden = hiddenBool;
+				else if (includeHiddenObj is System.Text.Json.JsonElement hiddenElem) includeHidden = hiddenElem.ValueKind == System.Text.Json.JsonValueKind.True;
+				else if (bool.TryParse(includeHiddenObj?.ToString(), out var parsed)) includeHidden = parsed;
+			}
+
+			return new ToolCatalogFilter { IncludeHiddenByDefault = includeHidden };
 		}
 	}
 }

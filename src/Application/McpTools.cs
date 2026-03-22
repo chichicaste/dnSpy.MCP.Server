@@ -25,12 +25,8 @@ using System.Reflection;
 using System.Text;
 using System.Text.Json;
 using dnlib.DotNet;
-using dnSpy.Contracts.Decompiler;
 using dnSpy.Contracts.Documents.Tabs.DocViewer;
-using dnSpy.Contracts.Documents.TreeView;
-using dnSpy.Contracts.Text;
 using dnSpy.MCP.Server.Contracts;
-using dnSpy.MCP.Server.Application;
 using dnSpy.MCP.Server.Helper;
 
 namespace dnSpy.MCP.Server.Application
@@ -38,8 +34,6 @@ namespace dnSpy.MCP.Server.Application
     [Export(typeof(McpTools))]
     public sealed partial class McpTools
     {
-        readonly IDocumentTreeView documentTreeView;
-        readonly IDecompilerService decompilerService;
         readonly Lazy<AssemblyTools> assemblyTools;
         readonly Lazy<TypeTools> typeTools;
         readonly Lazy<EditTools> editTools;
@@ -48,6 +42,8 @@ namespace dnSpy.MCP.Server.Application
         readonly Lazy<MemoryInspectTools> memoryInspectTools;
         readonly Lazy<UsageFindingCommandTools> usageFindingTools;
         readonly Lazy<CodeAnalysisHelpers> codeAnalysisTools;
+        readonly Lazy<ControlFlowTools> controlFlowTools;
+        readonly Lazy<DiscoveryTools> discoveryTools;
         readonly Lazy<De4dotExeTool> de4dotExeTool;
         readonly Lazy<De4dotTools> de4dotTools;
         readonly Lazy<SkillsTools> skillsTools;
@@ -56,8 +52,6 @@ namespace dnSpy.MCP.Server.Application
 
         [ImportingConstructor]
         public McpTools(
-            IDocumentTreeView documentTreeView,
-            IDecompilerService decompilerService,
             Lazy<AssemblyTools> assemblyTools,
             Lazy<TypeTools> typeTools,
             Lazy<EditTools> editTools,
@@ -66,6 +60,8 @@ namespace dnSpy.MCP.Server.Application
             Lazy<MemoryInspectTools> memoryInspectTools,
             Lazy<UsageFindingCommandTools> usageFindingTools,
             Lazy<CodeAnalysisHelpers> codeAnalysisTools,
+            Lazy<ControlFlowTools> controlFlowTools,
+            Lazy<DiscoveryTools> discoveryTools,
             Lazy<De4dotExeTool> de4dotExeTool,
             Lazy<De4dotTools> de4dotTools,
             Lazy<SkillsTools> skillsTools,
@@ -73,8 +69,6 @@ namespace dnSpy.MCP.Server.Application
             Lazy<WindowTools> windowTools
             )
         {
-            this.documentTreeView = documentTreeView;
-            this.decompilerService = decompilerService;
             this.assemblyTools = assemblyTools;
             this.typeTools = typeTools;
             this.editTools = editTools;
@@ -83,6 +77,8 @@ namespace dnSpy.MCP.Server.Application
             this.memoryInspectTools = memoryInspectTools;
             this.usageFindingTools = usageFindingTools;
             this.codeAnalysisTools = codeAnalysisTools;
+            this.controlFlowTools = controlFlowTools;
+            this.discoveryTools = discoveryTools;
             this.de4dotExeTool = de4dotExeTool;
             this.de4dotTools = de4dotTools;
             this.skillsTools = skillsTools;
@@ -100,7 +96,7 @@ namespace dnSpy.MCP.Server.Application
             {
                 var result = toolName switch
                 {
-                    "list_tools" => ListTools(),
+                    "list_tools" => ListTools(arguments),
                     "list_assemblies"      => InvokeLazy(assemblyTools, "ListAssemblies",      null),
                     "select_assembly"      => InvokeLazy(assemblyTools, "SelectAssembly",      arguments),
                     "close_assembly"       => InvokeLazy(assemblyTools, "CloseAssembly",       arguments),
@@ -112,9 +108,9 @@ namespace dnSpy.MCP.Server.Application
                     "list_methods_in_type" => InvokeLazy(typeTools, "ListMethodsInType", arguments),
                     "list_properties_in_type" => InvokeLazy(typeTools, "ListPropertiesInType", arguments),
                     "get_method_signature" => InvokeLazy(typeTools, "GetMethodSignature", arguments),
-                    "search_types" => SearchTypes(arguments),
-                    "find_who_calls_method" => FindWhoCallsMethod(arguments),
-                    "analyze_type_inheritance" => AnalyzeTypeInheritance(arguments),
+                    "search_types" => InvokeLazy(discoveryTools, "SearchTypes", arguments),
+                    "find_who_calls_method" => InvokeLazy(discoveryTools, "FindWhoCallsMethod", arguments),
+                    "analyze_type_inheritance" => InvokeLazy(discoveryTools, "AnalyzeTypeInheritance", arguments),
                     "get_method_il" => InvokeLazy(typeTools, "GetMethodIL", arguments),
                     "get_method_il_bytes" => InvokeLazy(typeTools, "GetMethodILBytes", arguments),
                     "get_method_exception_handlers" => InvokeLazy(typeTools, "GetMethodExceptionHandlers", arguments),
@@ -174,6 +170,8 @@ namespace dnSpy.MCP.Server.Application
                     "find_dependency_chain"                 => InvokeLazy(codeAnalysisTools, "FindDependencyChainArgs",                 arguments),
                     "analyze_cross_assembly_dependencies"   => InvokeLazy(codeAnalysisTools, "AnalyzeCrossAssemblyDependenciesArgs",   arguments),
                     "find_dead_code"                        => InvokeLazy(codeAnalysisTools, "FindDeadCodeArgs",                        arguments),
+                    "get_control_flow_graph"                => InvokeLazy(controlFlowTools, "GetControlFlowGraph",                     arguments),
+                    "get_basic_blocks"                      => InvokeLazy(controlFlowTools, "GetBasicBlocks",                          arguments),
 
                     // PE / string scanning tools
                     "scan_pe_strings" => InvokeLazy(assemblyTools, "ScanPeStrings", arguments),
@@ -258,9 +256,9 @@ namespace dnSpy.MCP.Server.Application
             }
         }
 
-        CallToolResult ListTools()
+        CallToolResult ListTools(Dictionary<string, object>? arguments)
         {
-            var tools = GetAvailableTools();
+            var tools = GetAvailableTools(CreateCatalogFilter(arguments));
             var json = JsonSerializer.Serialize(tools, new JsonSerializerOptions { WriteIndented = true });
             return new CallToolResult
             {
@@ -350,237 +348,31 @@ namespace dnSpy.MCP.Server.Application
             }
         }
 
-        dnlib.DotNet.AssemblyDef? FindAssemblyByName(string name)
-        {
-            return documentTreeView.GetAllModuleNodes()
-                .Select(m => m.Document?.AssemblyDef)
-                .FirstOrDefault(a => a?.Name.String.Equals(name, StringComparison.OrdinalIgnoreCase) == true);
-        }
-
-        dnlib.DotNet.TypeDef? FindTypeInAssembly(dnlib.DotNet.AssemblyDef assembly, string typeFullName)
-        {
-            return assembly.Modules
-                .SelectMany(m => m.Types)
-                .FirstOrDefault(t => t.FullName.Equals(typeFullName, StringComparison.OrdinalIgnoreCase));
-        }
-
-        CallToolResult SearchTypes(Dictionary<string, object>? arguments)
-        {
-            var query = RequireString(arguments, "query");
-
-            string? cursor = null;
-            if (arguments?.TryGetValue("cursor", out var cursorObj) == true)
-                cursor = cursorObj?.ToString();
-
-            var (offset, pageSize) = DecodeCursor(cursor);
-
-            bool hasWildcard = query.Contains("*");
-            System.Text.RegularExpressions.Regex? regex = null;
-
-            if (hasWildcard)
-            {
-                var regexPattern = "^" + System.Text.RegularExpressions.Regex.Escape(query).Replace("\\*", ".*") + "$";
-                regex = new System.Text.RegularExpressions.Regex(regexPattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            }
-
-            var results = documentTreeView.GetAllModuleNodes()
-                .SelectMany(m => m.Document?.AssemblyDef != null ? m.Document.AssemblyDef.Modules.SelectMany(mod => mod.Types) : Enumerable.Empty<dnlib.DotNet.TypeDef>())
-                .Where(t => {
-                    if (regex != null)
-                        return regex.IsMatch(t.FullName);
-                    return t.FullName.Contains(query, StringComparison.OrdinalIgnoreCase);
-                })
-                .Select(t => new
-                {
-                    FullName = t.FullName,
-                    Namespace = t.Namespace.String,
-                    Name = t.Name.String,
-                    AssemblyName = t.Module.Assembly?.Name.String ?? "Unknown"
-                })
-                .ToList();
-
-            return CreatePaginatedJsonResponse(results, offset, pageSize);
-        }
-
-        CallToolResult FindWhoCallsMethod(Dictionary<string, object>? arguments)
-        {
-            var asmName = RequireString(arguments, "assembly_name");
-            var typeName = RequireString(arguments, "type_full_name");
-            var methodNameStr = RequireString(arguments, "method_name");
-
-            var assembly = FindAssemblyByName(asmName);
-            if (assembly == null)
-                throw new ArgumentException($"Assembly not found: {asmName}");
-
-            var type = FindTypeInAssembly(assembly, typeName);
-            if (type == null)
-                throw new ArgumentException($"Type not found: {typeName}");
-
-            var targetMethod = type.Methods.FirstOrDefault(m => m.Name.String == methodNameStr);
-            if (targetMethod == null)
-                throw new ArgumentException($"Method not found: {methodNameStr}");
-
-            // Collect assembly references on the UI thread (documentTreeView is WPF-bound)
-            var targetFullName = targetMethod.FullName;
-            var assemblies = System.Windows.Application.Current.Dispatcher.Invoke(() =>
-                documentTreeView.GetAllModuleNodes()
-                    .Select(m => m.Document?.AssemblyDef)
-                    .Where(a => a != null)
-                    .ToList());
-
-            // IL scan runs on the background thread — dnlib objects are not WPF-bound
-            var callers = assemblies
-                .SelectMany(a => a!.Modules)
-                .SelectMany(mod => GetAllTypesRecursive(mod))
-                .SelectMany(t => t.Methods)
-                .Where(m => m.Body?.Instructions != null)
-                .SelectMany(m => m.Body.Instructions
-                    .Where(instr =>
-                        (instr.OpCode.Code == dnlib.DotNet.Emit.Code.Call ||
-                         instr.OpCode.Code == dnlib.DotNet.Emit.Code.Callvirt) &&
-                        instr.Operand is MethodDef calledDef && calledDef.FullName == targetFullName)
-                    .Select(_ => new {
-                        MethodName = m.Name.String,
-                        DeclaringType = m.DeclaringType?.FullName ?? "Unknown",
-                        AssemblyName = m.DeclaringType?.Module?.Assembly?.Name.String ?? "Unknown"
-                    }))
-                .OrderBy(c => c.AssemblyName).ThenBy(c => c.DeclaringType).ThenBy(c => c.MethodName)
-                .ToList();
-
-            var resultJson = System.Text.Json.JsonSerializer.Serialize(new {
-                TargetMethod = targetFullName,
-                CallerCount = callers.Count,
-                Callers = callers
-            }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
-
-            return new CallToolResult {
-                Content = new List<ToolContent> { new ToolContent { Text = resultJson } }
-            };
-        }
-
-        IEnumerable<TypeDef> GetAllTypesRecursive(ModuleDef module)
-        {
-            foreach (var type in module.Types)
-            {
-                yield return type;
-                foreach (var nested in GetAllNestedTypesRecursive(type))
-                    yield return nested;
-            }
-        }
-
-        IEnumerable<TypeDef> GetAllNestedTypesRecursive(TypeDef type)
-        {
-            foreach (var nested in type.NestedTypes)
-            {
-                yield return nested;
-                foreach (var deep in GetAllNestedTypesRecursive(nested))
-                    yield return deep;
-            }
-        }
-
-        CallToolResult AnalyzeTypeInheritance(Dictionary<string, object>? arguments)
-        {
-            var asmName = RequireString(arguments, "assembly_name");
-            var typeName = RequireString(arguments, "type_full_name");
-
-            var assembly = FindAssemblyByName(asmName);
-            if (assembly == null)
-                throw new ArgumentException($"Assembly not found: {asmName}");
-
-            var type = FindTypeInAssembly(assembly, typeName);
-            if (type == null)
-                throw new ArgumentException($"Type not found: {typeName}");
-
-            var baseClasses = new List<string>();
-            var currentType = type.BaseType;
-            while (currentType != null && currentType.FullName != "System.Object")
-            {
-                baseClasses.Add(currentType.FullName);
-                var typeDef = currentType.ResolveTypeDef();
-                currentType = typeDef?.BaseType;
-            }
-
-            var interfaces = type.Interfaces.Select(i => i.Interface.FullName).ToList();
-
-            var result = JsonSerializer.Serialize(new
-            {
-                Type = type.FullName,
-                BaseClasses = baseClasses,
-                Interfaces = interfaces
-            }, new JsonSerializerOptions { WriteIndented = true });
-
-            return new CallToolResult
-            {
-                Content = new List<ToolContent> { new ToolContent { Text = result } }
-            };
-        }
-
-        static (int offset, int pageSize) DecodeCursor(string? cursor)
-        {
-            if (string.IsNullOrEmpty(cursor))
-                return (0, 50);
-
-            try
-            {
-                var decoded = System.Text.Encoding.UTF8.GetString(System.Convert.FromBase64String(cursor));
-                var parts = decoded.Split(':');
-                if (parts.Length == 2 && int.TryParse(parts[0], out var offset) && int.TryParse(parts[1], out var pageSize))
-                    return (offset, pageSize);
-            }
-            catch { }
-            return (0, 10);
-        }
-
-        static string EncodeCursor(int offset, int pageSize)
-        {
-            return System.Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes($"{offset}:{pageSize}"));
-        }
-
-        static CallToolResult CreatePaginatedJsonResponse<T>(List<T> items, int offset, int pageSize)
-        {
-            var pagedItems = items.Skip(offset).Take(pageSize).ToList();
-            var hasMore = offset + pageSize < items.Count;
-
-            var result = new Dictionary<string, object>
-            {
-                ["items"] = pagedItems,
-                ["total_count"] = items.Count,
-                ["returned_count"] = pagedItems.Count,
-                ["offset"] = offset
-            };
-
-            if (hasMore)
-                result["nextCursor"] = EncodeCursor(offset + pageSize, pageSize);
-
-            var json = JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true });
-            return new CallToolResult
-            {
-                Content = new List<ToolContent> { new ToolContent { Text = json } }
-            };
-        }
-
-        // ── Parameter helpers ─────────────────────────────────────────────────
-        static string RequireString(Dictionary<string, object>? args, string key)
-        {
-            if (args == null || !args.TryGetValue(key, out var v) || v == null)
-                throw new ArgumentException($"Missing required parameter: '{key}'");
-            var s = v.ToString();
-            if (string.IsNullOrWhiteSpace(s))
-                throw new ArgumentException($"Parameter '{key}' cannot be empty");
-            return s!;
-        }
-
         static string? OptionalString(Dictionary<string, object>? args, string key, string? def = null)
         {
             if (args == null || !args.TryGetValue(key, out var v)) return def;
             return v?.ToString() ?? def;
         }
 
-        static int OptionalInt(Dictionary<string, object>? args, string key, int def = 0)
+        static ToolCatalogFilter CreateCatalogFilter(Dictionary<string, object>? arguments)
         {
-            if (args == null || !args.TryGetValue(key, out var v)) return def;
-            if (v is System.Text.Json.JsonElement je && je.TryGetInt32(out var ji)) return ji;
-            return int.TryParse(v?.ToString(), out var i) ? i : def;
+            var mode = OptionalString(arguments, "mode", "default");
+            var includeHidden = string.Equals(mode, "full", StringComparison.OrdinalIgnoreCase);
+
+            if (arguments != null && arguments.TryGetValue("include_hidden", out var includeHiddenValue))
+            {
+                if (includeHiddenValue is bool hiddenBool)
+                    includeHidden = hiddenBool;
+                else if (includeHiddenValue is JsonElement hiddenElement)
+                    includeHidden = hiddenElement.ValueKind == JsonValueKind.True;
+                else if (bool.TryParse(includeHiddenValue?.ToString(), out var parsed))
+                    includeHidden = parsed;
+            }
+
+            return new ToolCatalogFilter
+            {
+                IncludeHiddenByDefault = includeHidden
+            };
         }
 
         // ── Config management handlers ────────────────────────────────────────

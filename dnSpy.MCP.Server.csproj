@@ -17,6 +17,9 @@
     <ProjectReference Include="..\..\dnSpy\dnSpy.Contracts.Debugger\dnSpy.Contracts.Debugger.csproj" />
     <ProjectReference Include="..\..\dnSpy\dnSpy.Contracts.Debugger.DotNet\dnSpy.Contracts.Debugger.DotNet.csproj" />
     <ProjectReference Include="..\..\dnSpy\dnSpy.Contracts.Debugger.DotNet.CorDebug\dnSpy.Contracts.Debugger.DotNet.CorDebug.csproj" />
+    <ProjectReference Include="..\dnSpy.Extension.HoLLy\Echo\src\Core\Echo.Core\Echo.Core.csproj" />
+    <ProjectReference Include="..\dnSpy.Extension.HoLLy\Echo\src\Core\Echo.ControlFlow\Echo.ControlFlow.csproj" />
+    <ProjectReference Include="..\dnSpy.Extension.HoLLy\Echo\src\Platforms\Echo.Platforms.Dnlib\Echo.Platforms.Dnlib.csproj" />
   </ItemGroup>
 
   <!-- de4dot integration (deobfuscation engine) — DLLs bundled in libs/ -->

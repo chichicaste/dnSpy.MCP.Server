@@ -126,6 +126,50 @@ namespace dnSpy.MCP.Server.Contracts {
 		/// </summary>
 		[JsonPropertyName("inputSchema")]
 		public Dictionary<string, object> InputSchema { get; set; } = new Dictionary<string, object>();
+
+		/// <summary>
+		/// Additional catalog metadata used for discoverability and client guidance.
+		/// </summary>
+		[JsonPropertyName("catalog")]
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public ToolCatalogMetadata? Catalog { get; set; }
+	}
+
+	/// <summary>
+	/// Discoverability metadata attached to a tool definition.
+	/// </summary>
+	public class ToolCatalogMetadata {
+		/// <summary>
+		/// High-level category used to group tools for clients.
+		/// </summary>
+		[JsonPropertyName("category")]
+		public string Category { get; set; } = string.Empty;
+
+		/// <summary>
+		/// Whether the tool should be omitted from default listings.
+		/// </summary>
+		[JsonPropertyName("hidden_by_default")]
+		public bool HiddenByDefault { get; set; }
+
+		/// <summary>
+		/// Whether the tool is retained for compatibility and not preferred for new clients.
+		/// </summary>
+		[JsonPropertyName("is_legacy")]
+		public bool IsLegacy { get; set; }
+
+		/// <summary>
+		/// Preferred replacement tool name when this tool is legacy.
+		/// </summary>
+		[JsonPropertyName("preferred_replacement")]
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public string? PreferredReplacement { get; set; }
+
+		/// <summary>
+		/// Short guidance to help LLM clients pick the right summary/detail variant.
+		/// </summary>
+		[JsonPropertyName("notes")]
+		[JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+		public string? Notes { get; set; }
 	}
 
 	/// <summary>

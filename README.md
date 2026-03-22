@@ -982,4 +982,6 @@ netstat -ano | findstr :3100
 
 ## License
 
-GNU General Public License v3.0 — see [LICENSE](LICENSE) for details.
+Copyright (C) 2026 @chichicaste.
+
+Licensed under the GNU General Public License, version 3 or, at your option, any later version. See [LICENSE](LICENSE) for details.

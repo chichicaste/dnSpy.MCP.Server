@@ -18,7 +18,7 @@ namespace dnSpy.MCP.Server.Tools {
 			this.resources = resources;
 		}
 
-		public IReadOnlyList<ToolInfo> ListTools() => tools.GetAvailableTools();
+		public IReadOnlyList<ToolInfo> ListTools(ToolCatalogFilter? filter = null) => tools.GetAvailableTools(filter);
 
 		public bool ContainsTool(string toolName) => tools.GetAvailableTools().Any(a => string.Equals(a.Name, toolName, StringComparison.Ordinal));
 

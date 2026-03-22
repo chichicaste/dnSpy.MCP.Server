@@ -17,31 +17,39 @@
     along with dnSpy MCP Server.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using dnSpy.MCP.Server.Contracts;
 
 namespace dnSpy.MCP.Server.Application
 {
+    public sealed class ToolCatalogFilter
+    {
+        public bool IncludeHiddenByDefault { get; set; }
+    }
+
     public sealed partial class McpTools
     {
         // ── Aggregator ────────────────────────────────────────────────────────────
-        public List<ToolInfo> GetAvailableTools()
+        public List<ToolInfo> GetAvailableTools(ToolCatalogFilter? filter = null)
         {
             var tools = new List<ToolInfo>();
-            tools.AddRange(GetAssemblyToolSchemas());
-            tools.AddRange(GetTypeToolSchemas());
-            tools.AddRange(GetMethodILToolSchemas());
-            tools.AddRange(GetAnalysisToolSchemas());
-            tools.AddRange(GetEditToolSchemas());
-            tools.AddRange(GetResourceToolSchemas());
-            tools.AddRange(GetDebugToolSchemas());
-            tools.AddRange(GetMemoryToolSchemas());
-            tools.AddRange(GetDeobfuscationToolSchemas());
-            tools.AddRange(GetSkillsToolSchemas());
-            tools.AddRange(GetScriptingToolSchemas());
-            tools.AddRange(GetWindowToolSchemas());
-            tools.AddRange(GetUtilityToolSchemas());
-            return tools;
+            AddToolRange(tools, GetAssemblyToolSchemas(), "core-analysis");
+            AddToolRange(tools, GetTypeToolSchemas(), "core-analysis");
+            AddToolRange(tools, GetMethodILToolSchemas(), "core-analysis");
+            AddToolRange(tools, GetAnalysisToolSchemas(), "core-analysis");
+            AddToolRange(tools, GetControlFlowToolSchemas(), "core-analysis");
+            AddToolRange(tools, GetEditToolSchemas(), "editing");
+            AddToolRange(tools, GetResourceToolSchemas(), "editing");
+            AddToolRange(tools, GetDebugToolSchemas(), "debug-runtime");
+            AddToolRange(tools, GetMemoryToolSchemas(), "debug-runtime");
+            AddToolRange(tools, GetDeobfuscationToolSchemas(), "editing");
+            AddToolRange(tools, GetSkillsToolSchemas(), "admin");
+            AddToolRange(tools, GetScriptingToolSchemas(), "admin");
+            AddToolRange(tools, GetWindowToolSchemas(), "admin");
+            AddToolRange(tools, GetUtilityToolSchemas(), "admin");
+            return FilterCatalogTools(tools, filter);
         }
 
         // ── Assembly tools ────────────────────────────────────────────────────────
@@ -153,7 +161,7 @@ namespace dnSpy.MCP.Server.Application
         List<ToolInfo> GetTypeToolSchemas() => new List<ToolInfo> {
             new ToolInfo {
                 Name = "get_type_info",
-                Description = "Get detailed information about a specific type",
+                Description = "Get a summary view of a specific type. Best first call for type discovery before using detail tools like list_methods_in_type, list_properties_in_type, get_type_fields, or get_type_property.",
                 InputSchema = new Dictionary<string, object> {
                     ["type"] = "object",
                     ["properties"] = new Dictionary<string, object> {
@@ -193,7 +201,7 @@ namespace dnSpy.MCP.Server.Application
             },
             new ToolInfo {
                 Name = "list_methods_in_type",
-                Description = "List methods in a type. Filter by visibility and/or name pattern (glob or regex).",
+                Description = "List methods in a type. Prefer get_type_info first for summary discovery, then use this tool for detailed or filtered method enumeration.",
                 InputSchema = new Dictionary<string, object> {
                     ["type"] = "object",
                     ["properties"] = new Dictionary<string, object> {
@@ -223,7 +231,7 @@ namespace dnSpy.MCP.Server.Application
             },
             new ToolInfo {
                 Name = "list_properties_in_type",
-                Description = "List all properties in a type",
+                Description = "List all properties in a type. Prefer get_type_info first for a summary view, then use this tool when you need the dedicated property list.",
                 InputSchema = new Dictionary<string, object> {
                     ["type"] = "object",
                     ["properties"] = new Dictionary<string, object> {
@@ -599,6 +607,53 @@ namespace dnSpy.MCP.Server.Application
             },
         };
 
+        List<ToolInfo> GetControlFlowToolSchemas() => new List<ToolInfo> {
+            new ToolInfo {
+                Name = "get_control_flow_graph",
+                Description = "Construct a serializable control-flow graph for a managed CIL method using Echo.Platforms.Dnlib.",
+                InputSchema = new Dictionary<string, object> {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object> {
+                        ["assembly_name"] = new Dictionary<string, object> {
+                            ["type"] = "string",
+                            ["description"] = "Name of the loaded assembly"
+                        },
+                        ["type_full_name"] = new Dictionary<string, object> {
+                            ["type"] = "string",
+                            ["description"] = "Full name of the declaring type"
+                        },
+                        ["method_name"] = new Dictionary<string, object> {
+                            ["type"] = "string",
+                            ["description"] = "Method name to analyze"
+                        }
+                    },
+                    ["required"] = new List<string> { "assembly_name", "type_full_name", "method_name" }
+                }
+            },
+            new ToolInfo {
+                Name = "get_basic_blocks",
+                Description = "Return a simplified basic-block view for a managed CIL method using Echo.Platforms.Dnlib. This is a reduced view of get_control_flow_graph.",
+                InputSchema = new Dictionary<string, object> {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object> {
+                        ["assembly_name"] = new Dictionary<string, object> {
+                            ["type"] = "string",
+                            ["description"] = "Name of the loaded assembly"
+                        },
+                        ["type_full_name"] = new Dictionary<string, object> {
+                            ["type"] = "string",
+                            ["description"] = "Full name of the declaring type"
+                        },
+                        ["method_name"] = new Dictionary<string, object> {
+                            ["type"] = "string",
+                            ["description"] = "Method name to analyze"
+                        }
+                    },
+                    ["required"] = new List<string> { "assembly_name", "type_full_name", "method_name" }
+                }
+            }
+        };
+
         // ── Edit tools ────────────────────────────────────────────────────────────
         List<ToolInfo> GetEditToolSchemas() => new List<ToolInfo> {
             new ToolInfo {
@@ -684,7 +739,7 @@ namespace dnSpy.MCP.Server.Application
             },
             new ToolInfo {
                 Name = "list_assembly_attributes",
-                Description = "List all custom attributes declared at assembly level ([assembly: ...] in C#). Useful to discover protections like SuppressIldasmAttribute, ObfuscateAssemblyAttribute, etc.",
+                Description = "List all custom attributes declared at assembly level ([assembly: ...] in C#). Legacy compatibility view; prefer get_assembly_metadata for the primary metadata summary.",
                 InputSchema = new Dictionary<string, object> {
                     ["type"] = "object",
                     ["properties"] = new Dictionary<string, object> {
@@ -1246,7 +1301,7 @@ namespace dnSpy.MCP.Server.Application
         List<ToolInfo> GetDeobfuscationToolSchemas() => new List<ToolInfo> {
             new ToolInfo {
                 Name = "run_de4dot",
-                Description = "Run de4dot.exe as an external process to deobfuscate a .NET assembly. Supports all de4dot features including dynamic string decryption and ConfuserEx method decryption. Works in all builds.",
+                Description = "Run de4dot.exe as an external process to deobfuscate a .NET assembly. Preferred deobfuscation path because it supports the broadest de4dot feature set across builds.",
                 InputSchema = new Dictionary<string, object> {
                     ["type"] = "object",
                     ["properties"] = new Dictionary<string, object> {
@@ -1285,7 +1340,7 @@ namespace dnSpy.MCP.Server.Application
             },
             new ToolInfo {
                 Name = "deobfuscate_assembly",
-                Description = "Deobfuscate a .NET assembly using de4dot. Renames mangled symbols, deobfuscates control flow, and decrypts strings. Output is saved to disk.",
+                Description = "Deobfuscate a .NET assembly using in-process de4dot integration. Kept for compatibility; prefer run_de4dot as the primary deobfuscation path.",
                 InputSchema = new Dictionary<string, object> {
                     ["type"] = "object",
                     ["properties"] = new Dictionary<string, object> {
@@ -1451,10 +1506,20 @@ namespace dnSpy.MCP.Server.Application
         List<ToolInfo> GetUtilityToolSchemas() => new List<ToolInfo> {
             new ToolInfo {
                 Name = "list_tools",
-                Description = "List all available MCP tools",
+                Description = "List MCP tools with catalog metadata. Default mode hides tools marked hidden_by_default; pass mode='full' or include_hidden=true to see the complete catalog.",
                 InputSchema = new Dictionary<string, object> {
                     ["type"] = "object",
-                    ["properties"] = new Dictionary<string, object>()
+                    ["properties"] = new Dictionary<string, object> {
+                        ["mode"] = new Dictionary<string, object> {
+                            ["type"] = "string",
+                            ["description"] = "Catalog listing mode: 'default' hides hidden_by_default tools, 'full' returns the complete catalog."
+                        },
+                        ["include_hidden"] = new Dictionary<string, object> {
+                            ["type"] = "boolean",
+                            ["description"] = "Optional explicit override. When true, include tools marked hidden_by_default."
+                        }
+                    },
+                    ["required"] = new List<string>()
                 }
             },
             new ToolInfo {
@@ -1471,6 +1536,91 @@ namespace dnSpy.MCP.Server.Application
                     ["type"] = "object", ["properties"] = new Dictionary<string, object>(), ["required"] = new List<string>()
                 }
             },
+        };
+
+        static void AddToolRange(List<ToolInfo> destination, List<ToolInfo> tools, string category)
+        {
+            foreach (var tool in tools)
+            {
+                tool.Catalog = BuildCatalogMetadata(tool.Name, category);
+                destination.Add(tool);
+            }
+        }
+
+        static List<ToolInfo> FilterCatalogTools(List<ToolInfo> tools, ToolCatalogFilter? filter)
+        {
+            if (filter == null || filter.IncludeHiddenByDefault)
+                return tools;
+
+            return tools
+                .Where(t => t.Catalog?.HiddenByDefault != true)
+                .ToList();
+        }
+
+        static ToolCatalogMetadata BuildCatalogMetadata(string toolName, string defaultCategory)
+        {
+            var metadata = new ToolCatalogMetadata
+            {
+                Category = ResolveCategory(toolName, defaultCategory)
+            };
+
+            switch (toolName)
+            {
+            case "list_native_modules":
+            case "dump_module_from_memory":
+            case "close_all_assemblies":
+            case "reload_mcp_config":
+            case "list_dialogs":
+            case "close_dialog":
+                metadata.HiddenByDefault = true;
+                break;
+            }
+
+            switch (toolName)
+            {
+            case "list_assembly_attributes":
+                metadata.IsLegacy = true;
+                metadata.PreferredReplacement = "get_assembly_metadata";
+                metadata.Notes = "Assembly attribute listing is available through get_assembly_metadata. Use this tool only when you need the legacy attribute-only shape.";
+                break;
+            case "deobfuscate_assembly":
+                metadata.IsLegacy = true;
+                metadata.PreferredReplacement = "run_de4dot";
+                metadata.Notes = "Compatibility path for in-process deobfuscation. Prefer run_de4dot for the primary and broader-featured workflow.";
+                break;
+            case "run_de4dot":
+                metadata.Notes = "Primary deobfuscation entry point. Prefer this over deobfuscate_assembly for new clients.";
+                break;
+            case "get_basic_blocks":
+                metadata.Notes = "Reduced CFG view. Use get_control_flow_graph when you need edges, metrics, and entry/exit semantics.";
+                break;
+            case "get_control_flow_graph":
+                metadata.Notes = "Full CFG view. Prefer this over get_basic_blocks when you need edge kinds, metrics, or loop hints.";
+                break;
+            case "get_type_info":
+                metadata.Notes = "Summary-first type inspection. Prefer this before calling detail tools for methods, properties, or fields.";
+                break;
+            case "list_methods_in_type":
+                metadata.Notes = "Detail method enumeration. Prefer get_type_info first when exploring a type.";
+                break;
+            case "list_properties_in_type":
+                metadata.Notes = "Detail property enumeration. Prefer get_type_info first when exploring a type.";
+                break;
+            case "list_tools":
+                metadata.Notes = "Default mode hides tools marked hidden_by_default. Use mode='full' or include_hidden=true for the complete catalog.";
+                break;
+            }
+
+            return metadata;
+        }
+
+        static string ResolveCategory(string toolName, string defaultCategory) => toolName switch
+        {
+            "load_assembly" => "admin",
+            "select_assembly" => "admin",
+            "close_assembly" => "admin",
+            "close_all_assemblies" => "admin",
+            _ => defaultCategory
         };
     }
 }
