@@ -23,6 +23,7 @@ using System.ComponentModel.Composition;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -340,6 +341,14 @@ namespace dnSpy.MCP.Server.Application {
 			if (arguments.TryGetValue("process_id", out var pidObj) && pidObj is JsonElement pidElem && pidElem.TryGetInt32(out var pidInt))
 				filterPid = pidInt;
 
+			bool autoVirtualProtect = false;
+			if (arguments.TryGetValue("auto_virtual_protect", out var avpObj)) {
+				if (avpObj is JsonElement avpElem && (avpElem.ValueKind == JsonValueKind.True || avpElem.ValueKind == JsonValueKind.False))
+					autoVirtualProtect = avpElem.GetBoolean();
+				else if (bool.TryParse(avpObj?.ToString(), out var parsed))
+					autoVirtualProtect = parsed;
+			}
+
 			var mgr = dbgManager.Value;
 			if (!mgr.IsDebugging)
 				throw new InvalidOperationException("Debugger is not active.");
@@ -354,15 +363,33 @@ namespace dnSpy.MCP.Server.Application {
 			if (process == null)
 				throw new InvalidOperationException("No debugged process found.");
 
-			process.WriteMemory(address, bytes);
+			uint? originalProtect = null;
+			if (autoVirtualProtect) {
+				using var handle = OpenProcessForMemoryPatch(process.Id);
+				originalProtect = TemporarilyEnableWritableProtection(handle.DangerousGetHandle(), address, bytes.Length);
+				try {
+					process.WriteMemory(address, bytes);
+				}
+				finally {
+					RestoreMemoryProtection(handle.DangerousGetHandle(), address, bytes.Length, originalProtect.Value);
+				}
+			}
+			else {
+				process.WriteMemory(address, bytes);
+			}
 
 			var json = JsonSerializer.Serialize(new {
 				ProcessId    = process.Id,
 				ProcessName  = process.Name,
 				Address      = $"0x{address:X16}",
 				BytesWritten = bytes.Length,
+				AutoVirtualProtect = autoVirtualProtect,
+				OriginalProtection = originalProtect.HasValue ? $"0x{originalProtect.Value:X8}" : null,
 				Note         = "Memory write completed. Use read_process_memory to verify."
-			}, new JsonSerializerOptions { WriteIndented = true });
+			}, new JsonSerializerOptions {
+				WriteIndented = true,
+				DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+			});
 
 			return new CallToolResult {
 				Content = new List<ToolContent> { new ToolContent { Text = json } }
@@ -900,6 +927,36 @@ namespace dnSpy.MCP.Server.Application {
 				System.Text.RegularExpressions.RegexOptions.IgnoreCase |
 				System.Text.RegularExpressions.RegexOptions.CultureInvariant);
 		}
+
+		static Microsoft.Win32.SafeHandles.SafeProcessHandle OpenProcessForMemoryPatch(int processId) {
+			const uint desiredAccess = PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE;
+			var handle = OpenProcess(desiredAccess, false, processId);
+			if (handle.IsInvalid)
+				throw new InvalidOperationException($"OpenProcess failed for PID {processId}. Win32 error: {Marshal.GetLastWin32Error()}");
+			return handle;
+		}
+
+		static uint TemporarilyEnableWritableProtection(IntPtr processHandle, ulong address, int size) {
+			if (!VirtualProtectEx(processHandle, new IntPtr(unchecked((long)address)), new UIntPtr((uint)size), PAGE_EXECUTE_READWRITE, out var originalProtect))
+				throw new InvalidOperationException($"VirtualProtectEx failed at 0x{address:X16}. Win32 error: {Marshal.GetLastWin32Error()}");
+			return originalProtect;
+		}
+
+		static void RestoreMemoryProtection(IntPtr processHandle, ulong address, int size, uint originalProtect) {
+			if (!VirtualProtectEx(processHandle, new IntPtr(unchecked((long)address)), new UIntPtr((uint)size), originalProtect, out _))
+				throw new InvalidOperationException($"VirtualProtectEx restore failed at 0x{address:X16}. Win32 error: {Marshal.GetLastWin32Error()}");
+		}
+
+		const uint PROCESS_VM_OPERATION = 0x0008;
+		const uint PROCESS_VM_READ = 0x0010;
+		const uint PROCESS_VM_WRITE = 0x0020;
+		const uint PAGE_EXECUTE_READWRITE = 0x40;
+
+		[DllImport("kernel32.dll", SetLastError = true)]
+		static extern Microsoft.Win32.SafeHandles.SafeProcessHandle OpenProcess(uint dwDesiredAccess, bool bInheritHandle, int dwProcessId);
+
+		[DllImport("kernel32.dll", SetLastError = true)]
+		static extern bool VirtualProtectEx(IntPtr hProcess, IntPtr lpAddress, UIntPtr dwSize, uint flNewProtect, out uint lpflOldProtect);
 
 		static byte[] ParseHexBytes(string hex) {
 			// Accept "90 90 FF", "9090FF", "0x90, 0x90", "90-90-FF", etc.

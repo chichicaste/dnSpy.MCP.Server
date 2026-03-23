@@ -9,6 +9,9 @@
     <OutputPath>..\..\dnSpy\dnSpy\bin\$(Configuration)\</OutputPath>
     <Nullable>enable</Nullable>
     <UseWPF>true</UseWPF>
+    <!-- NU1903 is currently transitively introduced by ModelContextProtocol.Core 0.9.0-preview.2.
+         CS8002 comes from local Echo project references that are not strong-named. -->
+    <NoWarn>$(NoWarn);NU1903;CS8002</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -25,47 +28,30 @@
   <!-- de4dot integration (deobfuscation engine) — DLLs bundled in libs/ -->
   <!-- net48 build uses libs/de4dot/ (net48 DLLs) -->
   <!-- net10 build uses libs/de4dot-net8/ (net8 DLLs, compatible with net10) -->
-  <ItemGroup Condition=" '$(TargetFramework)' == 'net48' ">
+  <ItemGroup>
     <Reference Include="de4dot.code">
-      <HintPath>$(MSBuildThisFileDirectory)libs\de4dot\de4dot.code.dll</HintPath>
+      <HintPath Condition=" '$(TargetFramework)' == 'net48' ">$(MSBuildThisFileDirectory)libs\de4dot\de4dot.code.dll</HintPath>
+      <HintPath Condition=" '$(TargetFramework)' == 'net10.0-windows' ">$(MSBuildThisFileDirectory)libs\de4dot-net8\de4dot.code.dll</HintPath>
       <Private>true</Private>
     </Reference>
     <Reference Include="de4dot.blocks">
-      <HintPath>$(MSBuildThisFileDirectory)libs\de4dot\de4dot.blocks.dll</HintPath>
+      <HintPath Condition=" '$(TargetFramework)' == 'net48' ">$(MSBuildThisFileDirectory)libs\de4dot\de4dot.blocks.dll</HintPath>
+      <HintPath Condition=" '$(TargetFramework)' == 'net10.0-windows' ">$(MSBuildThisFileDirectory)libs\de4dot-net8\de4dot.blocks.dll</HintPath>
       <Private>true</Private>
     </Reference>
     <Reference Include="de4dot.mdecrypt">
-      <HintPath>$(MSBuildThisFileDirectory)libs\de4dot\de4dot.mdecrypt.dll</HintPath>
+      <HintPath Condition=" '$(TargetFramework)' == 'net48' ">$(MSBuildThisFileDirectory)libs\de4dot\de4dot.mdecrypt.dll</HintPath>
+      <HintPath Condition=" '$(TargetFramework)' == 'net10.0-windows' ">$(MSBuildThisFileDirectory)libs\de4dot-net8\de4dot.mdecrypt.dll</HintPath>
       <Private>true</Private>
     </Reference>
     <Reference Include="de4dot.cui">
-      <HintPath>$(MSBuildThisFileDirectory)libs\de4dot\de4dot.cui.dll</HintPath>
+      <HintPath Condition=" '$(TargetFramework)' == 'net48' ">$(MSBuildThisFileDirectory)libs\de4dot\de4dot.cui.dll</HintPath>
+      <HintPath Condition=" '$(TargetFramework)' == 'net10.0-windows' ">$(MSBuildThisFileDirectory)libs\de4dot-net8\de4dot.cui.dll</HintPath>
       <Private>true</Private>
     </Reference>
     <Reference Include="AssemblyData">
-      <HintPath>$(MSBuildThisFileDirectory)libs\de4dot\AssemblyData.dll</HintPath>
-      <Private>true</Private>
-    </Reference>
-  </ItemGroup>
-  <ItemGroup Condition=" '$(TargetFramework)' != 'net48' ">
-    <Reference Include="de4dot.code">
-      <HintPath>$(MSBuildThisFileDirectory)libs\de4dot-net8\de4dot.code.dll</HintPath>
-      <Private>true</Private>
-    </Reference>
-    <Reference Include="de4dot.blocks">
-      <HintPath>$(MSBuildThisFileDirectory)libs\de4dot-net8\de4dot.blocks.dll</HintPath>
-      <Private>true</Private>
-    </Reference>
-    <Reference Include="de4dot.mdecrypt">
-      <HintPath>$(MSBuildThisFileDirectory)libs\de4dot-net8\de4dot.mdecrypt.dll</HintPath>
-      <Private>true</Private>
-    </Reference>
-    <Reference Include="de4dot.cui">
-      <HintPath>$(MSBuildThisFileDirectory)libs\de4dot-net8\de4dot.cui.dll</HintPath>
-      <Private>true</Private>
-    </Reference>
-    <Reference Include="AssemblyData">
-      <HintPath>$(MSBuildThisFileDirectory)libs\de4dot-net8\AssemblyData.dll</HintPath>
+      <HintPath Condition=" '$(TargetFramework)' == 'net48' ">$(MSBuildThisFileDirectory)libs\de4dot\AssemblyData.dll</HintPath>
+      <HintPath Condition=" '$(TargetFramework)' == 'net10.0-windows' ">$(MSBuildThisFileDirectory)libs\de4dot-net8\AssemblyData.dll</HintPath>
       <Private>true</Private>
     </Reference>
   </ItemGroup>
@@ -74,6 +60,7 @@
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.3" />
     <PackageReference Include="Microsoft.VisualStudio.Text.UI.Wpf" Version="$(MSVSTextVersion)" />
     <PackageReference Include="ModelContextProtocol" Version="0.9.0-preview.2" />
+    <PackageReference Include="Iced" Version="$(IcedVersion)" />
     <!-- Roslyn scripting — compile-time reference only; DLL already ships with dnSpy -->
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="5.0.0">
       <ExcludeAssets>runtime</ExcludeAssets>

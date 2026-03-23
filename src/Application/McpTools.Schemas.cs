@@ -48,6 +48,8 @@ namespace dnSpy.MCP.Server.Application
             AddToolRange(tools, GetSkillsToolSchemas(), "admin");
             AddToolRange(tools, GetScriptingToolSchemas(), "admin");
             AddToolRange(tools, GetWindowToolSchemas(), "admin");
+            AddToolRange(tools, GetSourceMapToolSchemas(), "core-analysis");
+            AddToolRange(tools, GetNativeRuntimeToolSchemas(), "debug-runtime");
             AddToolRange(tools, GetUtilityToolSchemas(), "admin");
             return FilterCatalogTools(tools, filter);
         }
@@ -949,7 +951,7 @@ namespace dnSpy.MCP.Server.Application
             },
             new ToolInfo {
                 Name = "set_breakpoint",
-                Description = "Set a breakpoint at a method entry point (or specific IL offset). The breakpoint persists across debug sessions. Use file_path to select the right assembly when multiple share the same name.",
+                Description = "Set a breakpoint at a method entry point (or specific IL offset). The breakpoint persists across debug sessions. Supports safe aliases like $arg0, $local0, arg(0), local(0), field(\"...\") and memberByToken(\"0x...\") in conditions when they can be mapped to a valid evaluator expression. Use file_path to select the right assembly when multiple share the same name.",
                 InputSchema = new Dictionary<string, object> {
                     ["type"] = "object",
                     ["properties"] = new Dictionary<string, object> {
@@ -958,9 +960,123 @@ namespace dnSpy.MCP.Server.Application
                         ["method_name"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Name of the method" },
                         ["il_offset"] = new Dictionary<string, object> { ["type"] = "integer", ["description"] = "IL offset within the method body (default 0 = method entry)" },
                         ["file_path"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Full path to the assembly file (optional; disambiguates when multiple assemblies share the same name)" },
-                        ["condition"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Optional C# condition expression — breakpoint only fires when true (e.g. \"i > 100\", \"value != null\")" }
+                        ["condition"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Optional C# condition expression. Supports aliases like $arg0, $local0, arg(0), local(0), field(\"...\") and memberByToken(\"0x...\") when resolvable to a valid evaluator expression." }
                     },
                     ["required"] = new List<string> { "assembly_name", "type_full_name", "method_name" }
+                }
+            },
+            new ToolInfo {
+                Name = "set_breakpoint_ex",
+                Description = "Extended breakpoint setter. Same behavior as set_breakpoint, kept as a dedicated entry point for clients that want the alias-aware runtime workflow explicitly, including field(\"...\") and memberByToken(\"0x...\") helpers.",
+                InputSchema = new Dictionary<string, object> {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object> {
+                        ["assembly_name"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Name of the assembly" },
+                        ["type_full_name"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Full name of the type" },
+                        ["method_name"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Name of the method" },
+                        ["il_offset"] = new Dictionary<string, object> { ["type"] = "integer", ["description"] = "Optional IL offset (default 0)." },
+                        ["file_path"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Optional assembly path to disambiguate duplicates." },
+                        ["condition"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Optional C# condition expression with alias support such as $arg0, $local0, arg(0), local(0), field(\"...\") and memberByToken(\"0x...\")." }
+                    },
+                    ["required"] = new List<string> { "assembly_name", "type_full_name", "method_name" }
+                }
+            },
+            new ToolInfo {
+                Name = "batch_breakpoints",
+                Description = "Create multiple breakpoints in one call to reduce round-trips. Each item uses the same shape as set_breakpoint and supports alias-aware conditions.",
+                InputSchema = new Dictionary<string, object> {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object> {
+                        ["items"] = new Dictionary<string, object> {
+                            ["type"] = "array",
+                            ["description"] = "Array of breakpoint definitions. Each item requires assembly_name, type_full_name, and method_name; optional il_offset, file_path, and condition are also supported."
+                        }
+                    },
+                    ["required"] = new List<string> { "items" }
+                }
+            },
+            new ToolInfo {
+                Name = "get_method_by_token",
+                Description = "Resolve a managed MethodDef token to metadata and best-effort runtime load information. Use this when token-oriented reversing is more reliable than names.",
+                InputSchema = new Dictionary<string, object> {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object> {
+                        ["assembly_name"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Assembly containing the MethodDef token." },
+                        ["token"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "MethodDef token as hex (0x06001234) or decimal." }
+                    },
+                    ["required"] = new List<string> { "assembly_name", "token" }
+                }
+            },
+            new ToolInfo {
+                Name = "trace_method",
+                Description = "Create a persistent managed method trace interceptor backed by a dnSpy breakpoint plus an in-memory hit log. It does not pause execution; instead it records each hit until removed or max_calls is reached.",
+                InputSchema = new Dictionary<string, object> {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object> {
+                        ["assembly_name"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Assembly containing the target method." },
+                        ["type_full_name"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Full type name. Required unless token is provided." },
+                        ["method_name"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Method name. Required unless token is provided." },
+                        ["token"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Optional MethodDef token as hex (0x06001234) or decimal. When supplied it is used instead of type_full_name/method_name." },
+                        ["il_offset"] = new Dictionary<string, object> { ["type"] = "integer", ["description"] = "Optional IL offset inside the method body. Default 0 (method entry)." },
+                        ["condition"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Optional alias-aware C# condition. Supports $argN, $localN, arg(N), local(N), field(\"...\"), and memberByToken(\"0x...\")." },
+                        ["file_path"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Optional assembly path used to disambiguate duplicate loaded names." },
+                        ["max_calls"] = new Dictionary<string, object> { ["type"] = "integer", ["description"] = "Optional auto-stop count. The interceptor removes itself after this many hits." },
+                        ["max_log_entries"] = new Dictionary<string, object> { ["type"] = "integer", ["description"] = "Maximum number of in-memory hit records to retain. Default 256." }
+                    },
+                    ["required"] = new List<string> { "assembly_name" }
+                }
+            },
+            new ToolInfo {
+                Name = "hook_function",
+                Description = "Create a persistent managed method interception session. action=break pauses on each hit, action=log traces without pausing, and action=count only keeps hit accounting. This is the managed interception entry point; modify_return is not implemented yet.",
+                InputSchema = new Dictionary<string, object> {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object> {
+                        ["assembly_name"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Assembly containing the target method." },
+                        ["type_full_name"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Full type name. Required unless token is provided." },
+                        ["method_name"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Method name. Required unless token is provided." },
+                        ["token"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Optional MethodDef token as hex (0x06001234) or decimal." },
+                        ["action"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Interception action: break, log, or count. Default break." },
+                        ["il_offset"] = new Dictionary<string, object> { ["type"] = "integer", ["description"] = "Optional IL offset inside the method body. Default 0." },
+                        ["condition"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Optional alias-aware C# condition expression." },
+                        ["file_path"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Optional assembly path used to disambiguate duplicate loaded names." },
+                        ["max_calls"] = new Dictionary<string, object> { ["type"] = "integer", ["description"] = "Optional auto-stop count. The interceptor removes itself after this many hits." },
+                        ["max_log_entries"] = new Dictionary<string, object> { ["type"] = "integer", ["description"] = "Maximum number of hit records retained in memory. Default 256." }
+                    },
+                    ["required"] = new List<string> { "assembly_name" }
+                }
+            },
+            new ToolInfo {
+                Name = "list_active_interceptors",
+                Description = "List currently active MCP-managed interception sessions. include_inactive=true also shows removed or exhausted sessions still kept for log retrieval.",
+                InputSchema = new Dictionary<string, object> {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object> {
+                        ["include_inactive"] = new Dictionary<string, object> { ["type"] = "boolean", ["description"] = "Include inactive sessions whose breakpoint has already been removed." }
+                    },
+                    ["required"] = new List<string>()
+                }
+            },
+            new ToolInfo {
+                Name = "get_interceptor_log",
+                Description = "Return the in-memory hit log for a persistent trace/hook session. Use list_active_interceptors first to discover session ids.",
+                InputSchema = new Dictionary<string, object> {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object> {
+                        ["session_id"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Interceptor session id returned by trace_method or hook_function." }
+                    },
+                    ["required"] = new List<string> { "session_id" }
+                }
+            },
+            new ToolInfo {
+                Name = "remove_interceptor",
+                Description = "Remove a persistent interception session and delete its underlying dnSpy breakpoint.",
+                InputSchema = new Dictionary<string, object> {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object> {
+                        ["session_id"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Interceptor session id returned by trace_method or hook_function." }
+                    },
+                    ["required"] = new List<string> { "session_id" }
                 }
             },
             new ToolInfo {
@@ -997,10 +1113,12 @@ namespace dnSpy.MCP.Server.Application
             },
             new ToolInfo {
                 Name = "break_debugger",
-                Description = "Pause all currently running debugged processes",
+                Description = "Pause all currently running debugged processes. safe_pause=true documents the intent to avoid Debugger.Break()-style interruption; dnSpy MCP uses DbgManager.BreakAll() in both modes.",
                 InputSchema = new Dictionary<string, object> {
                     ["type"] = "object",
-                    ["properties"] = new Dictionary<string, object>(),
+                    ["properties"] = new Dictionary<string, object> {
+                        ["safe_pause"] = new Dictionary<string, object> { ["type"] = "boolean", ["description"] = "Prefer a debugger-engine pause strategy. dnSpy MCP uses BreakAll and does not call Debugger.Break()." }
+                    },
                     ["required"] = new List<string>()
                 }
             },
@@ -1188,14 +1306,15 @@ namespace dnSpy.MCP.Server.Application
             },
             new ToolInfo {
                 Name = "write_process_memory",
-                Description = "Write bytes to a debugged process address (hot-patching / live memory editing). Useful for disabling checks or patching instructions without modifying the binary on disk. Requires an active debug session. Use read_process_memory to verify after writing.",
+                Description = "Write bytes to a debugged process address (hot-patching / live memory editing). Useful for disabling checks or patching instructions without modifying the binary on disk. Requires an active debug session. Use read_process_memory to verify after writing. auto_virtual_protect can temporarily change protection with VirtualProtectEx and restore it after the patch.",
                 InputSchema = new Dictionary<string, object> {
                     ["type"] = "object",
                     ["properties"] = new Dictionary<string, object> {
                         ["address"]      = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Target address as hex (0x7FF000) or decimal" },
                         ["bytes_base64"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Bytes to write as base64 (use this or hex_bytes)" },
                         ["hex_bytes"]    = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Bytes to write as hex string, e.g. \"90 90 FF\" or \"9090FF\" (use this or bytes_base64)" },
-                        ["process_id"]   = new Dictionary<string, object> { ["type"] = "integer", ["description"] = "Optional: target process ID when multiple processes are being debugged" }
+                        ["process_id"]   = new Dictionary<string, object> { ["type"] = "integer", ["description"] = "Optional: target process ID when multiple processes are being debugged" },
+                        ["auto_virtual_protect"] = new Dictionary<string, object> { ["type"] = "boolean", ["description"] = "Temporarily switch page protection with VirtualProtectEx before writing and restore the original protection afterward." }
                     },
                     ["required"] = new List<string> { "address" }
                 }
@@ -1268,14 +1387,28 @@ namespace dnSpy.MCP.Server.Application
             },
             new ToolInfo {
                 Name = "eval_expression",
-                Description = "Evaluate a C# expression in the context of the current paused stack frame, equivalent to the Watch window in dnSpy. Returns the value with type information. Supports field/property access, method calls (with func_eval), arithmetic, and casts. Requires the debugger to be paused.",
+                Description = "Evaluate a C# expression in the context of the current paused stack frame, equivalent to the Watch window in dnSpy. Returns the value with type information. Supports field/property access, method calls (with func_eval), arithmetic, casts, and safe aliases like $arg0, $local0, arg(0), local(0), field(\"...\") and memberByToken(\"0x...\") when they can be mapped to valid evaluator expressions. Requires the debugger to be paused.",
                 InputSchema = new Dictionary<string, object> {
                     ["type"] = "object",
                     ["properties"] = new Dictionary<string, object> {
-                        ["expression"]                = new Dictionary<string, object> { ["type"] = "string",  ["description"] = "C# expression to evaluate (e.g. \"myObj.Field\", \"arr.Length\", \"(int)someValue\")" },
+                        ["expression"]                = new Dictionary<string, object> { ["type"] = "string",  ["description"] = "C# expression to evaluate. Supports aliases like $arg0, $local0, arg(0), local(0), field(\"...\") and memberByToken(\"0x...\") when resolvable by the dnSpy evaluator." },
                         ["frame_index"]               = new Dictionary<string, object> { ["type"] = "integer", ["description"] = "Stack frame index (0 = innermost/current, default 0)" },
                         ["process_id"]                = new Dictionary<string, object> { ["type"] = "integer", ["description"] = "Optional: target process ID when multiple processes are being debugged" },
                         ["func_eval_timeout_seconds"] = new Dictionary<string, object> { ["type"] = "integer", ["description"] = "Timeout for function evaluation calls in the debuggee (default 5s). Increase if the evaluated expression involves slow methods." }
+                    },
+                    ["required"] = new List<string> { "expression" }
+                }
+            },
+            new ToolInfo {
+                Name = "eval_expression_ex",
+                Description = "Extended expression evaluation entry point for obfuscated/debugger-heavy workflows. Same evaluator behavior as eval_expression, including alias-aware arguments, locals, field(\"...\") and memberByToken(\"0x...\") helpers.",
+                InputSchema = new Dictionary<string, object> {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object> {
+                        ["expression"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "C# expression to evaluate. Supports $argN/$localN, arg(N)/local(N), field(\"...\") and memberByToken(\"0x...\") helpers." },
+                        ["frame_index"] = new Dictionary<string, object> { ["type"] = "integer", ["description"] = "Stack frame index (0 = innermost/current, default 0)." },
+                        ["process_id"] = new Dictionary<string, object> { ["type"] = "integer", ["description"] = "Optional process ID when multiple processes are debugged." },
+                        ["func_eval_timeout_seconds"] = new Dictionary<string, object> { ["type"] = "integer", ["description"] = "Timeout for debugger func-eval operations. Default 5 seconds." }
                     },
                     ["required"] = new List<string> { "expression" }
                 }
@@ -1502,6 +1635,220 @@ namespace dnSpy.MCP.Server.Application
             },
         };
 
+        // ── SourceMap tools ──────────────────────────────────────────────────────
+        List<ToolInfo> GetSourceMapToolSchemas() => new List<ToolInfo> {
+            new ToolInfo {
+                Name = "get_source_map_name",
+                Description = "Resolve the current SourceMap name for a type/member without requiring the HoLLy UI decompiler. Constructors map to their declaring type, matching HoLLy's behavior.",
+                InputSchema = new Dictionary<string, object> {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object> {
+                        ["assembly_name"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Assembly that contains the target member." },
+                        ["type_full_name"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Full type name. If member_kind/member_name are omitted, resolves the type mapping itself." },
+                        ["member_kind"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Optional member kind: type, method, field, or property." },
+                        ["member_name"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Optional member name. Required when member_kind is provided." }
+                    },
+                    ["required"] = new List<string> { "assembly_name", "type_full_name" }
+                }
+            },
+            new ToolInfo {
+                Name = "set_source_map_name",
+                Description = "Set or update a SourceMap entry for a type/member and persist it to the MCP cache. Constructors map to their declaring type, matching HoLLy's SourceMap rules.",
+                InputSchema = new Dictionary<string, object> {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object> {
+                        ["assembly_name"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Assembly that contains the target member." },
+                        ["type_full_name"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Full type name for the target." },
+                        ["member_kind"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Optional member kind: type, method, field, or property." },
+                        ["member_name"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Optional member name. Required when member_kind is provided." },
+                        ["mapped_name"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Display name to store in the SourceMap." }
+                    },
+                    ["required"] = new List<string> { "assembly_name", "type_full_name", "mapped_name" }
+                }
+            },
+            new ToolInfo {
+                Name = "list_source_map_entries",
+                Description = "List all cached SourceMap entries for an assembly. Use this as the detail view after save/load operations.",
+                InputSchema = new Dictionary<string, object> {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object> {
+                        ["assembly_name"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Assembly whose SourceMap cache should be listed." }
+                    },
+                    ["required"] = new List<string> { "assembly_name" }
+                }
+            },
+            new ToolInfo {
+                Name = "save_source_map",
+                Description = "Save the current SourceMap cache for an assembly to disk. Defaults to the MCP cache directory under %APPDATA%\\dnSpy\\dnSpy.MCPServer\\sourcemaps\\.",
+                InputSchema = new Dictionary<string, object> {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object> {
+                        ["assembly_name"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Assembly whose SourceMap cache should be written." },
+                        ["output_path"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Optional explicit output path. Defaults to the MCP SourceMap cache path." }
+                    },
+                    ["required"] = new List<string> { "assembly_name" }
+                }
+            },
+            new ToolInfo {
+                Name = "load_source_map",
+                Description = "Load a SourceMap XML file for an assembly and mirror it into the MCP cache, without requiring HoLLy's menu commands.",
+                InputSchema = new Dictionary<string, object> {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object> {
+                        ["assembly_name"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Assembly that the SourceMap applies to." },
+                        ["input_path"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Path to the SourceMap XML file to load." }
+                    },
+                    ["required"] = new List<string> { "assembly_name", "input_path" }
+                }
+            },
+        };
+
+        // ── Native runtime tools ────────────────────────────────────────────────
+        List<ToolInfo> GetNativeRuntimeToolSchemas() => new List<ToolInfo> {
+            new ToolInfo {
+                Name = "get_proc_address",
+                Description = "Resolve the exported address of a native function from a loaded module by parsing its PE export table and combining the export RVA with the mapped base address.",
+                InputSchema = new Dictionary<string, object> {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object> {
+                        ["module"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Loaded module name, filename, or full path (e.g. kernel32.dll)." },
+                        ["function"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Exported function name to resolve." },
+                        ["process_id"] = new Dictionary<string, object> { ["type"] = "integer", ["description"] = "Optional target process ID when multiple debugged processes are present." }
+                    },
+                    ["required"] = new List<string> { "module", "function" }
+                }
+            },
+            new ToolInfo {
+                Name = "patch_native_function",
+                Description = "Patch a loaded native export in memory by resolving its address from the PE export table and writing bytes at the mapped address. auto_virtual_protect defaults to true and restores the original protection after patching.",
+                InputSchema = new Dictionary<string, object> {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object> {
+                        ["module"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Loaded module name, filename, or full path." },
+                        ["function"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Exported function name to patch." },
+                        ["hex_bytes"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Patch bytes as hex, e.g. \"33 C0 C3\"." },
+                        ["bytes"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Alias of hex_bytes for compatibility with patching workflows." },
+                        ["bytes_base64"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Patch bytes as base64. Use this or the hex form." },
+                        ["process_id"] = new Dictionary<string, object> { ["type"] = "integer", ["description"] = "Optional target process ID when multiple debugged processes are present." },
+                        ["auto_virtual_protect"] = new Dictionary<string, object> { ["type"] = "boolean", ["description"] = "Temporarily switch memory protection with VirtualProtectEx before patching and restore it afterwards. Default true." }
+                    },
+                    ["required"] = new List<string> { "module", "function" }
+                }
+            },
+            new ToolInfo {
+                Name = "disassemble_native_function",
+                Description = "Disassemble a loaded native export directly from process memory using Iced. This is the richer symbol-oriented native disassembly entry point over the lower-level read_native_memory(format=disasm).",
+                InputSchema = new Dictionary<string, object> {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object> {
+                        ["module"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Loaded module name, filename, or full path." },
+                        ["function"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Exported function name to disassemble." },
+                        ["size"] = new Dictionary<string, object> { ["type"] = "integer", ["description"] = "Number of bytes to decode from the function start. Default 128." },
+                        ["process_id"] = new Dictionary<string, object> { ["type"] = "integer", ["description"] = "Optional target process ID when multiple debugged processes are present." }
+                    },
+                    ["required"] = new List<string> { "module", "function" }
+                }
+            },
+            new ToolInfo {
+                Name = "inject_native_dll",
+                Description = "Inject a native DLL into the target process by writing the DLL path to remote memory and calling LoadLibraryW through CreateRemoteThread.",
+                InputSchema = new Dictionary<string, object> {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object> {
+                        ["dll_path"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Absolute path to the native DLL to inject." },
+                        ["process_id"] = new Dictionary<string, object> { ["type"] = "integer", ["description"] = "Optional target process ID." }
+                    },
+                    ["required"] = new List<string> { "dll_path" }
+                }
+            },
+            new ToolInfo {
+                Name = "inject_managed_dll",
+                Description = "Inject a managed DLL and invoke a method inside the target process. For CLR targets it uses ExecuteInDefaultAppDomain; for Unity/Mono it uses mono_runtime_invoke. No UI dependency.",
+                InputSchema = new Dictionary<string, object> {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object> {
+                        ["dll_path"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Absolute path to the managed DLL to inject." },
+                        ["type_name"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Full type name containing the entry method. For Unity, namespace and type are derived from this value." },
+                        ["method_name"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Managed method name to invoke." },
+                        ["argument"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Optional string argument passed to the invoked method." },
+                        ["copy_to_temp"] = new Dictionary<string, object> { ["type"] = "boolean", ["description"] = "Copy the DLL to a temporary location before injection. Default false." },
+                        ["process_id"] = new Dictionary<string, object> { ["type"] = "integer", ["description"] = "Optional target process ID." }
+                    },
+                    ["required"] = new List<string> { "dll_path", "type_name", "method_name" }
+                }
+            },
+            new ToolInfo {
+                Name = "revert_patch",
+                Description = "Revert a previously tracked native patch by patch_id and optionally restore protection with VirtualProtectEx.",
+                InputSchema = new Dictionary<string, object> {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object> {
+                        ["patch_id"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Patch identifier returned by patch_native_function." },
+                        ["auto_virtual_protect"] = new Dictionary<string, object> { ["type"] = "boolean", ["description"] = "Temporarily switch protection before restoring original bytes. Default true." }
+                    },
+                    ["required"] = new List<string> { "patch_id" }
+                }
+            },
+            new ToolInfo {
+                Name = "list_active_patches",
+                Description = "List tracked runtime patches created through patch_native_function, including original bytes and timestamps.",
+                InputSchema = new Dictionary<string, object> {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object>(),
+                    ["required"] = new List<string>()
+                }
+            },
+            new ToolInfo {
+                Name = "read_native_memory",
+                Description = "Read native memory from the current debugged process with formatting optimized for reversing workflows. format can be hex, ascii, or disasm (Iced-based x86/x64 decode).",
+                InputSchema = new Dictionary<string, object> {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object> {
+                        ["address"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Target address as hex (0x7FFE1234) or decimal." },
+                        ["size"] = new Dictionary<string, object> { ["type"] = "integer", ["description"] = "Number of bytes to read (1-65536)." },
+                        ["format"] = new Dictionary<string, object> { ["type"] = "string", ["description"] = "Output format: hex, ascii, or disasm. Default hex." },
+                        ["process_id"] = new Dictionary<string, object> { ["type"] = "integer", ["description"] = "Optional target process ID." }
+                    },
+                    ["required"] = new List<string> { "address", "size" }
+                }
+            },
+            new ToolInfo {
+                Name = "suspend_threads",
+                Description = "Suspend all threads in the current debugged process or a selected subset. Uses dnSpy's thread Freeze() API and tracks only suspensions made through this tool.",
+                InputSchema = new Dictionary<string, object> {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object> {
+                        ["process_id"] = new Dictionary<string, object> { ["type"] = "integer", ["description"] = "Optional target process ID." },
+                        ["thread_ids"] = new Dictionary<string, object> { ["type"] = "array", ["description"] = "Optional array of thread IDs to suspend. If omitted, all process threads are targeted." }
+                    },
+                    ["required"] = new List<string>()
+                }
+            },
+            new ToolInfo {
+                Name = "resume_threads",
+                Description = "Resume threads previously frozen through suspend_threads. This only thaws suspensions tracked by the MCP tool to avoid touching unrelated debugger state.",
+                InputSchema = new Dictionary<string, object> {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object> {
+                        ["process_id"] = new Dictionary<string, object> { ["type"] = "integer", ["description"] = "Optional target process ID." },
+                        ["thread_ids"] = new Dictionary<string, object> { ["type"] = "array", ["description"] = "Optional array of thread IDs to resume. If omitted, all tracked frozen threads in the process are targeted." }
+                    },
+                    ["required"] = new List<string>()
+                }
+            },
+            new ToolInfo {
+                Name = "get_peb",
+                Description = "Read best-effort PEB anti-debug fields from the current debugged process, including BeingDebugged, NtGlobalFlag, and heap flags when available.",
+                InputSchema = new Dictionary<string, object> {
+                    ["type"] = "object",
+                    ["properties"] = new Dictionary<string, object> {
+                        ["process_id"] = new Dictionary<string, object> { ["type"] = "integer", ["description"] = "Optional target process ID." }
+                    },
+                    ["required"] = new List<string>()
+                }
+            },
+        };
+
         // ── Utility tools ─────────────────────────────────────────────────────────
         List<ToolInfo> GetUtilityToolSchemas() => new List<ToolInfo> {
             new ToolInfo {
@@ -1597,6 +1944,36 @@ namespace dnSpy.MCP.Server.Application
             case "get_control_flow_graph":
                 metadata.Notes = "Full CFG view. Prefer this over get_basic_blocks when you need edge kinds, metrics, or loop hints.";
                 break;
+            case "eval_expression_ex":
+                metadata.Notes = "Extended entry point for debugger-heavy workflows. Prefer eval_expression for normal use and this variant when a client wants the explicit obfuscation-aware contract.";
+                break;
+            case "set_breakpoint_ex":
+                metadata.Notes = "Extended entry point for alias-aware breakpoint workflows. Prefer set_breakpoint for standard use.";
+                break;
+            case "trace_method":
+                metadata.Notes = "Persistent managed tracing without pausing execution. Prefer this over hook_function when you only need hit logs.";
+                break;
+            case "hook_function":
+                metadata.Notes = "Persistent managed interception built on dnSpy breakpoints. Use action=break for pause-on-hit, action=log for tracing, and action=count for lightweight hit accounting.";
+                break;
+            case "list_active_interceptors":
+                metadata.Notes = "Summary view of all MCP-managed interception sessions. Use get_interceptor_log for the detailed per-hit view.";
+                break;
+            case "get_interceptor_log":
+                metadata.Notes = "Detail hit log for one interception session. Use list_active_interceptors first to discover session ids.";
+                break;
+            case "read_native_memory":
+                metadata.Notes = "Native reversing view over process memory. Prefer this over read_process_memory when you want ascii or disassembly formatting.";
+                break;
+            case "disassemble_native_function":
+                metadata.Notes = "Symbol-oriented Iced disassembly. Prefer this over read_native_memory when you already know the module and export name.";
+                break;
+            case "inject_managed_dll":
+                metadata.Notes = "Managed code injection without UI. Uses CLR ExecuteInDefaultAppDomain for classic CLR and mono_runtime_invoke for Unity.";
+                break;
+            case "inject_native_dll":
+                metadata.Notes = "Native DLL injection via LoadLibraryW and CreateRemoteThread.";
+                break;
             case "get_type_info":
                 metadata.Notes = "Summary-first type inspection. Prefer this before calling detail tools for methods, properties, or fields.";
                 break;
@@ -1620,6 +1997,11 @@ namespace dnSpy.MCP.Server.Application
             "select_assembly" => "admin",
             "close_assembly" => "admin",
             "close_all_assemblies" => "admin",
+            "trace_method" => "debug-runtime",
+            "hook_function" => "debug-runtime",
+            "list_active_interceptors" => "debug-runtime",
+            "get_interceptor_log" => "debug-runtime",
+            "remove_interceptor" => "debug-runtime",
             _ => defaultCategory
         };
     }

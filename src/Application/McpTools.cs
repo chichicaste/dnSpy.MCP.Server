@@ -49,6 +49,9 @@ namespace dnSpy.MCP.Server.Application
         readonly Lazy<SkillsTools> skillsTools;
         readonly Lazy<ScriptTools> scriptTools;
         readonly Lazy<WindowTools> windowTools;
+        readonly Lazy<SourceMapTools> sourceMapTools;
+        readonly Lazy<NativeRuntimeTools> nativeRuntimeTools;
+        readonly Lazy<InterceptionTools> interceptionTools;
 
         [ImportingConstructor]
         public McpTools(
@@ -66,7 +69,10 @@ namespace dnSpy.MCP.Server.Application
             Lazy<De4dotTools> de4dotTools,
             Lazy<SkillsTools> skillsTools,
             Lazy<ScriptTools> scriptTools,
-            Lazy<WindowTools> windowTools
+            Lazy<WindowTools> windowTools,
+            Lazy<SourceMapTools> sourceMapTools,
+            Lazy<NativeRuntimeTools> nativeRuntimeTools,
+            Lazy<InterceptionTools> interceptionTools
             )
         {
             this.assemblyTools = assemblyTools;
@@ -84,6 +90,9 @@ namespace dnSpy.MCP.Server.Application
             this.skillsTools = skillsTools;
             this.scriptTools = scriptTools;
             this.windowTools = windowTools;
+            this.sourceMapTools = sourceMapTools;
+            this.nativeRuntimeTools = nativeRuntimeTools;
+            this.interceptionTools = interceptionTools;
         }
 
         // GetAvailableTools() is defined in McpTools.Schemas.cs (partial class)
@@ -159,6 +168,7 @@ namespace dnSpy.MCP.Server.Application
                     // Memory inspect / runtime variable tools
                     "get_local_variables" => InvokeLazy(memoryInspectTools, "GetLocalVariables", arguments),
                     "eval_expression"     => InvokeLazy(memoryInspectTools, "EvalExpression",    arguments),
+                    "eval_expression_ex"  => InvokeLazy(memoryInspectTools, "EvalExpressionEx", arguments),
 
                     // Usage finding tools
                     "find_who_uses_type"   => InvokeLazy(usageFindingTools, "FindWhoUsesTypeArgs",   arguments),
@@ -189,6 +199,14 @@ namespace dnSpy.MCP.Server.Application
                     "get_debugger_state" => InvokeLazy(debugTools, "GetDebuggerState", arguments),
                     "list_breakpoints" => InvokeLazy(debugTools, "ListBreakpoints", arguments),
                     "set_breakpoint" => InvokeLazy(debugTools, "SetBreakpoint", arguments),
+                    "set_breakpoint_ex" => InvokeLazy(debugTools, "SetBreakpointEx", arguments),
+                    "batch_breakpoints" => InvokeLazy(debugTools, "BatchBreakpoints", arguments),
+                    "get_method_by_token" => InvokeLazy(debugTools, "GetMethodByToken", arguments),
+                    "trace_method" => InvokeLazy(interceptionTools, "TraceMethod", arguments),
+                    "hook_function" => InvokeLazy(interceptionTools, "HookFunction", arguments),
+                    "list_active_interceptors" => InvokeLazy(interceptionTools, "ListActiveInterceptors", arguments),
+                    "get_interceptor_log" => InvokeLazy(interceptionTools, "GetInterceptorLog", arguments),
+                    "remove_interceptor" => InvokeLazy(interceptionTools, "RemoveInterceptor", arguments),
                     "remove_breakpoint" => InvokeLazy(debugTools, "RemoveBreakpoint", arguments),
                     "clear_all_breakpoints" => InvokeLazy(debugTools, "ClearAllBreakpoints", arguments),
                     "continue_debugger" => InvokeLazy(debugTools, "ContinueDebugger", arguments),
@@ -231,6 +249,26 @@ namespace dnSpy.MCP.Server.Application
                     // Window / dialog management
                     "list_dialogs" => InvokeLazy(windowTools, "ListDialogs", arguments),
                     "close_dialog" => InvokeLazy(windowTools, "CloseDialog", arguments),
+
+                    // SourceMap tools
+                    "get_source_map_name" => InvokeLazy(sourceMapTools, "GetSourceMapName", arguments),
+                    "set_source_map_name" => InvokeLazy(sourceMapTools, "SetSourceMapName", arguments),
+                    "list_source_map_entries" => InvokeLazy(sourceMapTools, "ListSourceMapEntries", arguments),
+                    "save_source_map" => InvokeLazy(sourceMapTools, "SaveSourceMap", arguments),
+                    "load_source_map" => InvokeLazy(sourceMapTools, "LoadSourceMap", arguments),
+
+                    // Native runtime tools
+                    "get_proc_address" => InvokeLazy(nativeRuntimeTools, "GetProcAddress", arguments),
+                    "patch_native_function" => InvokeLazy(nativeRuntimeTools, "PatchNativeFunction", arguments),
+                    "disassemble_native_function" => InvokeLazy(nativeRuntimeTools, "DisassembleNativeFunction", arguments),
+                    "inject_native_dll" => InvokeLazy(nativeRuntimeTools, "InjectNativeDll", arguments),
+                    "inject_managed_dll" => InvokeLazy(nativeRuntimeTools, "InjectManagedDll", arguments),
+                    "revert_patch" => InvokeLazy(nativeRuntimeTools, "RevertPatch", arguments),
+                    "list_active_patches" => InvokeLazy(nativeRuntimeTools, "ListActivePatches", arguments),
+                    "read_native_memory" => InvokeLazy(nativeRuntimeTools, "ReadNativeMemory", arguments),
+                    "suspend_threads" => InvokeLazy(nativeRuntimeTools, "SuspendThreads", arguments),
+                    "resume_threads" => InvokeLazy(nativeRuntimeTools, "ResumeThreads", arguments),
+                    "get_peb" => InvokeLazy(nativeRuntimeTools, "GetPeb", arguments),
 
                     _ => new CallToolResult
                     {

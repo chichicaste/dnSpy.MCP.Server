@@ -22,7 +22,9 @@ using System.Collections.Generic;
 using System.ComponentModel.Composition;
 using System.Linq;
 using System.Text.Json;
+using dnlib.DotNet;
 using dnSpy.Contracts.Debugger;
+using dnSpy.Contracts.Documents.TreeView;
 using dnSpy.Contracts.Debugger.DotNet.Evaluation;
 using dnSpy.Contracts.Debugger.Evaluation;
 using dnSpy.MCP.Server.Contracts;
@@ -37,13 +39,16 @@ namespace dnSpy.MCP.Server.Application {
 	public sealed class MemoryInspectTools {
 		readonly Lazy<DbgManager> dbgManager;
 		readonly Lazy<DbgLanguageService> languageService;
+		readonly IDocumentTreeView documentTreeView;
 
 		[ImportingConstructor]
 		public MemoryInspectTools(
 			Lazy<DbgManager> dbgManager,
-			Lazy<DbgLanguageService> languageService) {
+			Lazy<DbgLanguageService> languageService,
+			IDocumentTreeView documentTreeView) {
 			this.dbgManager = dbgManager;
 			this.languageService = languageService;
+			this.documentTreeView = documentTreeView;
 		}
 
 		// ── get_local_variables ──────────────────────────────────────────────────
@@ -251,15 +256,48 @@ namespace dnSpy.MCP.Server.Application {
 					TimeSpan.FromSeconds(funcEvalTimeout));
 
 				var evalInfo = new DbgEvaluationInfo(context, frame);
+
+				if (runtime.InternalRuntime is not IDbgDotNetRuntime dotNetRuntime)
+					throw new InvalidOperationException("Runtime is not a .NET runtime.");
+
+				var frameMethod = dotNetRuntime.GetFrameMethod(evalInfo);
+				var parameterNames = frameMethod?.GetParameters()
+					.Select(p => p.Name)
+					.ToList() ?? new List<string?>();
+				var localIndexes = frameMethod?.GetMethodBody()?.LocalVariables
+					.Select(v => (int)v.LocalIndex)
+					.ToHashSet() ?? new HashSet<int>();
+				var methodDef = ResolveMethodDef(frame);
+				var aliasContext = methodDef != null ? DebuggerExpressionAliasContext.Create(methodDef) : null;
+
+				var rewrite = DebuggerExpressionAliasHelper.Rewrite(expression, parameterNames, localIndexes, aliasContext);
+				if (rewrite.Error != null) {
+					var aliasErrJson = JsonSerializer.Serialize(new {
+						Expression = expression,
+						RewrittenExpression = rewrite.RewrittenExpression,
+						Error = rewrite.Error,
+						AliasNotes = rewrite.Notes
+					}, new JsonSerializerOptions { WriteIndented = true });
+					return new CallToolResult {
+						Content = new List<ToolContent> { new ToolContent { Text = aliasErrJson } },
+						IsError = true
+					};
+				}
+
 				var evalResult = language.ExpressionEvaluator.Evaluate(
-					evalInfo, expression, DbgEvaluationOptions.Expression, null);
+					evalInfo, rewrite.RewrittenExpression, DbgEvaluationOptions.Expression, null);
 
 				if (evalResult.Error != null) {
 					var errJson = JsonSerializer.Serialize(new {
 						Expression = expression,
+						RewrittenExpression = rewrite.UsedAliases ? rewrite.RewrittenExpression : null,
+						AliasNotes = rewrite.Notes.Count == 0 ? null : rewrite.Notes,
 						Error = evalResult.Error,
 						IsThrownException = evalResult.IsThrownException
-					}, new JsonSerializerOptions { WriteIndented = true });
+					}, new JsonSerializerOptions {
+						WriteIndented = true,
+						DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+					});
 					return new CallToolResult {
 						Content = new List<ToolContent> { new ToolContent { Text = errJson } },
 						IsError = true
@@ -268,6 +306,8 @@ namespace dnSpy.MCP.Server.Application {
 
 				var resultJson = JsonSerializer.Serialize(new {
 					Expression        = expression,
+					RewrittenExpression = rewrite.UsedAliases ? rewrite.RewrittenExpression : null,
+					AliasNotes = rewrite.Notes.Count == 0 ? null : rewrite.Notes,
 					Value             = FormatDbgValue(evalResult.Value),
 					IsThrownException = evalResult.IsThrownException,
 					HasSideEffects    = (evalResult.Flags & DbgEvaluationResultFlags.SideEffects) != 0
@@ -286,6 +326,8 @@ namespace dnSpy.MCP.Server.Application {
 			}
 		});
 	}
+
+	public CallToolResult EvalExpressionEx(Dictionary<string, object>? arguments) => EvalExpression(arguments);
 
 	static object FormatDbgValue(DbgValue? value) {
 		if (value == null)
@@ -336,6 +378,26 @@ namespace dnSpy.MCP.Server.Application {
 				return new { Type = value.Type?.FullName, Kind = "Array", ElementCount = elemCount };
 
 			return new { Type = value.Type?.FullName, Kind = "Complex" };
+		}
+
+		MethodDef? ResolveMethodDef(dnSpy.Contracts.Debugger.CallStack.DbgStackFrame frame) {
+			var moduleFile = frame.Module?.Filename;
+			var token = frame.FunctionToken;
+			if (string.IsNullOrWhiteSpace(moduleFile) || token == 0)
+				return null;
+
+			var assembly = documentTreeView.GetAllModuleNodes()
+				.Select(m => m.Document?.AssemblyDef)
+				.FirstOrDefault(a => a != null && a.Modules.Any(mod =>
+					string.Equals(mod.Location, moduleFile, StringComparison.OrdinalIgnoreCase) ||
+					string.Equals(mod.Name, frame.Module?.Name, StringComparison.OrdinalIgnoreCase)));
+			if (assembly == null)
+				return null;
+
+			return assembly.Modules
+				.SelectMany(m => m.GetTypes())
+				.SelectMany(t => t.Methods)
+				.FirstOrDefault(m => m.MDToken.Raw == token);
 		}
 	}
 }
